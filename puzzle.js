@@ -15,12 +15,16 @@ function resetRefrigeratorPuzzle() {
     const row = Math.floor(groupIndex / 2);
     const targetX = refrigeratorPuzzle.boardX + column * 3 * refrigeratorPuzzle.cellSize;
     const targetY = refrigeratorPuzzle.boardY + row * 2 * refrigeratorPuzzle.cellSize;
-    const sourceRow = Math.floor(groupIndex / 3);
     const sourceColumn = groupIndex % 3;
-    refrigeratorPuzzle.pieces.push(
-      { cells: [[0, 0], [0, 1], [1, 1]], targetX, targetY, x: 28 + sourceColumn * 109, y: 42 + sourceRow * 148, color: colors[groupIndex] },
-      { cells: [[0, 0], [1, 0], [1, 1]], targetX: targetX + refrigeratorPuzzle.cellSize, targetY, x: 640 + sourceColumn * 105, y: 42 + sourceRow * 148, color: colors[(groupIndex + 3) % colors.length] },
-    );
+    const sourceRow = Math.floor(groupIndex / 3);
+    refrigeratorPuzzle.pieces.push({
+      cells: [[0, 0], [1, 0], [2, 0], [0, 1], [1, 1], [2, 1]],
+      targetX,
+      targetY,
+      x: (sourceRow === 0 ? 20 : 615) + sourceColumn * 108,
+      y: 42 + sourceRow * 148,
+      color: colors[groupIndex],
+    });
   }
   for (const piece of refrigeratorPuzzle.pieces) {
     piece.startX = piece.x;
@@ -112,9 +116,9 @@ function finishPuzzleDrag(event, cancelled = false) {
     if (refrigeratorPuzzle.pieces.every(candidate => candidate.placed)) {
       refrigeratorPuzzle.finishing = true;
       window.soundEngine.playPuzzleSound(true);
-      gameFlow.completed.add('breakfast_prepared');
+      completeTask('cat_treats');
       gameFlow.fridgeEver = true;
-      gameFlow.breakfastBowl = 'carried';
+      gameFlow.catTreats = true;
       window.setTimeout(() => {
         if (currentSceneId === 'refrigerator' && refrigeratorPuzzle.finishing) sceneTransition.start('living_room', 120);
       }, 700);
