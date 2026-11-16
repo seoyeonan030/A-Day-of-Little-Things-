@@ -9,20 +9,32 @@ const refrigeratorPuzzle = {
 
 function resetRefrigeratorPuzzle() {
   const colors = ['#b8c6ba', '#d3b6a3', '#b6c4d2', '#dfcf9e', '#c5b5c2', '#b8cec9'];
+  const edges = [
+    { top: 0, right: 1, bottom: 1, left: 0 },
+    { top: 0, right: 0, bottom: -1, left: -1 },
+    { top: -1, right: -1, bottom: -1, left: 0 },
+    { top: 1, right: 0, bottom: 1, left: 1 },
+    { top: 1, right: 1, bottom: 0, left: 0 },
+    { top: -1, right: 0, bottom: 0, left: -1 },
+  ];
+  const sourcePositions = [
+    { x: 20, y: 28 }, { x: 615, y: 28 },
+    { x: 20, y: 126 }, { x: 615, y: 126 },
+    { x: 20, y: 224 }, { x: 615, y: 224 },
+  ];
   refrigeratorPuzzle.pieces = [];
   for (let groupIndex = 0; groupIndex < 6; groupIndex++) {
     const column = groupIndex % 2;
     const row = Math.floor(groupIndex / 2);
     const targetX = refrigeratorPuzzle.boardX + column * 3 * refrigeratorPuzzle.cellSize;
     const targetY = refrigeratorPuzzle.boardY + row * 2 * refrigeratorPuzzle.cellSize;
-    const sourceColumn = groupIndex % 3;
-    const sourceRow = Math.floor(groupIndex / 3);
     refrigeratorPuzzle.pieces.push({
       cells: [[0, 0], [1, 0], [2, 0], [0, 1], [1, 1], [2, 1]],
+      edges: edges[groupIndex],
       targetX,
       targetY,
-      x: (sourceRow === 0 ? 20 : 615) + sourceColumn * 108,
-      y: 42 + sourceRow * 148,
+      x: sourcePositions[groupIndex].x,
+      y: sourcePositions[groupIndex].y,
       color: colors[groupIndex],
     });
   }
@@ -35,25 +47,47 @@ function resetRefrigeratorPuzzle() {
   refrigeratorPuzzle.finishing = false;
 }
 
-function drawPuzzlePiece(context, piece, positionX, positionY, fillColor, strokeColor) {
+function puzzlePiecePath(piece, positionX, positionY) {
   const cellSize = refrigeratorPuzzle.cellSize;
-  const hasCell = (column, row) => piece.cells.some(cell => cell[0] === column && cell[1] === row);
-  context.fillStyle = fillColor;
-  for (const [column, row] of piece.cells) {
-    context.fillRect(positionX + column * cellSize, positionY + row * cellSize, cellSize, cellSize);
+  const width = (Math.max(...piece.cells.map(cell => cell[0])) + 1) * cellSize;
+  const height = (Math.max(...piece.cells.map(cell => cell[1])) + 1) * cellSize;
+  const tabDepth = cellSize * 0.2;
+  const tabHalfWidth = cellSize * 0.18;
+  const centerX = positionX + width / 2;
+  const centerY = positionY + height / 2;
+  const path = new Path2D();
+
+  path.moveTo(positionX, positionY);
+  if (piece.edges.top) {
+    path.lineTo(centerX - tabHalfWidth, positionY);
+    path.bezierCurveTo(centerX - tabHalfWidth, positionY - piece.edges.top * tabDepth, centerX + tabHalfWidth, positionY - piece.edges.top * tabDepth, centerX + tabHalfWidth, positionY);
   }
+  path.lineTo(positionX + width, positionY);
+  if (piece.edges.right) {
+    path.lineTo(positionX + width, centerY - tabHalfWidth);
+    path.bezierCurveTo(positionX + width + piece.edges.right * tabDepth, centerY - tabHalfWidth, positionX + width + piece.edges.right * tabDepth, centerY + tabHalfWidth, positionX + width, centerY + tabHalfWidth);
+  }
+  path.lineTo(positionX + width, positionY + height);
+  if (piece.edges.bottom) {
+    path.lineTo(centerX + tabHalfWidth, positionY + height);
+    path.bezierCurveTo(centerX + tabHalfWidth, positionY + height + piece.edges.bottom * tabDepth, centerX - tabHalfWidth, positionY + height + piece.edges.bottom * tabDepth, centerX - tabHalfWidth, positionY + height);
+  }
+  path.lineTo(positionX, positionY + height);
+  if (piece.edges.left) {
+    path.lineTo(positionX, centerY + tabHalfWidth);
+    path.bezierCurveTo(positionX - piece.edges.left * tabDepth, centerY + tabHalfWidth, positionX - piece.edges.left * tabDepth, centerY - tabHalfWidth, positionX, centerY - tabHalfWidth);
+  }
+  path.closePath();
+  return path;
+}
+
+function drawPuzzlePiece(context, piece, positionX, positionY, fillColor, strokeColor) {
+  const path = puzzlePiecePath(piece, positionX, positionY);
+  context.fillStyle = fillColor;
+  context.fill(path);
   context.strokeStyle = strokeColor;
   context.lineWidth = 2;
-  context.beginPath();
-  for (const [column, row] of piece.cells) {
-    const left = positionX + column * cellSize;
-    const top = positionY + row * cellSize;
-    if (!hasCell(column, row - 1)) { context.moveTo(left, top); context.lineTo(left + cellSize, top); }
-    if (!hasCell(column + 1, row)) { context.moveTo(left + cellSize, top); context.lineTo(left + cellSize, top + cellSize); }
-    if (!hasCell(column, row + 1)) { context.moveTo(left, top + cellSize); context.lineTo(left + cellSize, top + cellSize); }
-    if (!hasCell(column - 1, row)) { context.moveTo(left, top); context.lineTo(left, top + cellSize); }
-  }
-  context.stroke();
+  context.stroke(path);
 }
 
 function drawRefrigeratorPuzzle(context) {
@@ -82,11 +116,8 @@ document.addEventListener('pointerdown', event => {
   if (event.target !== canvas || currentSceneId !== 'refrigerator' || sceneTransition.active || refrigeratorPuzzle.finishing || event.button !== 0) return;
   window.soundEngine.ensureResume();
   const position = puzzlePointerPosition(event);
-  const piece = [...refrigeratorPuzzle.pieces].reverse().find(candidate => !candidate.placed && candidate.cells.some(([column, row]) => {
-    const left = candidate.x + column * refrigeratorPuzzle.cellSize;
-    const top = candidate.y + row * refrigeratorPuzzle.cellSize;
-    return position.x >= left && position.x < left + refrigeratorPuzzle.cellSize && position.y >= top && position.y < top + refrigeratorPuzzle.cellSize;
-  }));
+  const piece = [...refrigeratorPuzzle.pieces].reverse().find(candidate =>
+    !candidate.placed && ctx.isPointInPath(puzzlePiecePath(candidate, candidate.x, candidate.y), position.x, position.y));
   if (!piece) return;
   refrigeratorPuzzle.dragging = { piece, offsetX: position.x - piece.x, offsetY: position.y - piece.y, pointerId: event.pointerId };
   canvas.setPointerCapture(event.pointerId);
@@ -108,7 +139,7 @@ function finishPuzzleDrag(event, cancelled = false) {
   const piece = drag.piece;
   refrigeratorPuzzle.dragging = null;
   if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
-  if (!cancelled && Math.hypot(piece.x - piece.targetX, piece.y - piece.targetY) <= 16) {
+  if (!cancelled && Math.hypot(piece.x - piece.targetX, piece.y - piece.targetY) <= refrigeratorPuzzle.cellSize * 0.8) {
     piece.x = piece.targetX;
     piece.y = piece.targetY;
     piece.placed = true;

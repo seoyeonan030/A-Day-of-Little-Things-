@@ -2,16 +2,36 @@
 
 const canvas = document.getElementById('viewport');
 const ctx = canvas.getContext('2d');
+const endingBackdrop = document.createElement('canvas');
+endingBackdrop.width = canvas.width;
+endingBackdrop.height = canvas.height;
+const endingBackdropContext = endingBackdrop.getContext('2d');
+const endingUI = {
+  view: 'summary',
+  scrollTop: 110,
+  scrollBottom: 276,
+  contentHeight: 574,
+  scrollY: 0,
+  scrollTargetY: 0,
+  dragStartY: null,
+  dragStartScroll: 0,
+};
 
 const VIEW_ZOOM = 1;
 const GROUND_Y = canvas.height;
 const PLAYER_BASE_Y = GROUND_Y;
+const RABBIT_PLUSH_DROP = 4.5;
 const PLANTER_SHIFT = 112;
 const PLANTER_RAISE = 48;
 const PLANTER_DROP = 48;
 const FLOWER_CENTER = 274.75;
 const FLOWER_CENTER_TOP = 210;
 const WINDOW_COLOR = '#dedede';
+const GUARD_WINDOW_COLOR = '#d5edfa';
+
+function getWindowColor(defaultColor) {
+  return defaultColor;
+}
 const BUS_STOP_LEFT_SHIFT = 40;
 const BUS_WIDTH = 697;
 const BUS_STOP_POSITION = 920 - BUS_STOP_LEFT_SHIFT - BUS_WIDTH;
@@ -179,60 +199,16 @@ const player = {
     if (elevatorArrivalElapsed >= 0 && elevatorArrivalElapsed < 1600) return;
     const activityMotion = gameFlow.mode === 'dialogue' ? gameFlow.activityMotion : null;
     if (this.sitting) {
-      ctx.save();
-      ctx.translate(this.x, this.sitting.seatY);
-      ctx.scale(this.facing * scale, scale);
-      ctx.fillStyle = '#ffffff';
-      const torsoLength = this.sitting.seatId === 'bus_stop_bench' ? 15 : 22;
-      ctx.fillRect(-2.5, -torsoLength - 11, 8.5, 11);
-      ctx.fillRect(-2.5, -torsoLength, 4, torsoLength);
-      if (activityMotion === 'cat') {
-        const strokeOffset = Math.sin(performance.now() / 120) * 1.5;
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 3.3;
-        ctx.beginPath();
-        ctx.moveTo(1, -torsoLength + 3);
-        ctx.lineTo(13, -10);
-        ctx.lineTo(25 + strokeOffset, -7);
-        ctx.stroke();
-      } else if (gameFlow.hasRabbitPlush) {
-        ctx.fillStyle = '#f2a6c4';
-        ctx.fillRect(1, -torsoLength + 1, 3, 5);
-        ctx.fillRect(0, -torsoLength - 4, 2, 4);
-        ctx.fillRect(3, -torsoLength - 4, 2, 4);
-        ctx.fillStyle = '#ffffff';
-      } else if (activityMotion === 'cereal') {
-        const spoonProgress = (1 + Math.cos(performance.now() / 240)) / 2;
-        const handX = 7 + 14 * spoonProgress;
-        const handY = -26 + 12 * spoonProgress;
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = 3.3;
-        ctx.beginPath();
-        ctx.moveTo(1, -19);
-        ctx.lineTo(8, -14);
-        ctx.lineTo(handX, handY);
-        ctx.stroke();
-        ctx.strokeStyle = '#777777';
-        ctx.lineWidth = 1.2;
-        ctx.beginPath();
-        ctx.moveTo(handX, handY);
-        ctx.lineTo(handX + 3, handY + 1);
-        ctx.stroke();
-        ctx.fillStyle = '#777777';
-        ctx.fillRect(handX + 2.5, handY, 2, 2);
-        ctx.fillStyle = '#ffffff';
-      } else {
-        ctx.fillRect(0, -torsoLength + 3, 3.3, torsoLength - 6);
-      }
-      ctx.fillRect(-2.5, -3, 11, 4);
-      ctx.fillRect(5, 0, 4, (GROUND_Y - this.sitting.seatY) / scale);
-      ctx.fillRect(5, (GROUND_Y - this.sitting.seatY) / scale - 2.5, 7, 2.5);
-      ctx.restore();
+      drawPlayerSittingCharacter(ctx, this.x, this.sitting.seatY, this.facing, this.sitting.seatId, activityMotion, gameFlow.hasRabbitPlush);
       return;
     }
     const bob = (this.state === 'WALK')
       ? Math.abs(Math.sin(this.walkPhase)) * 2.2
       : Math.sin(this.idlePhase) * 1.0;
+    if (this.state === 'IDLE' && !activityMotion) {
+      drawPlayerStandingCharacter(ctx, this.x, this.y, this.facing, bob, gameFlow.hasRabbitPlush);
+      return;
+    }
 
     ctx.save();
     ctx.translate(this.x, this.y - scale * (1.5 + bob));
@@ -271,9 +247,9 @@ const player = {
       ctx.fillRect(-2.5, -39 + bob, bodyWidth, 25);
       if (gameFlow.hasRabbitPlush) {
         ctx.fillStyle = '#f2a6c4';
-        ctx.fillRect(1, -39 + bob, 3, 5);
-        ctx.fillRect(0, -43 + bob, 2, 4);
-        ctx.fillRect(3, -43 + bob, 2, 4);
+        ctx.fillRect(1.75, -36 + bob + RABBIT_PLUSH_DROP, 1.5, 2.5);
+        ctx.fillRect(1.5, -38 + bob + RABBIT_PLUSH_DROP, 1, 2);
+        ctx.fillRect(3.5, -38 + bob + RABBIT_PLUSH_DROP, 1, 2);
         ctx.fillStyle = '#ffffff';
       }
       ctx.fillRect(-2.5, -50 + bob, 8.5, 11);
@@ -380,7 +356,7 @@ const scenes = {
   },
 };
 
-const TASK_PROGRESS_KEY = 'slightly-different-day-unlocked-tasks';
+const TASK_PROGRESS_KEY = 'slightly-different-day-ending-unlocks-v2';
 
 const gameFlow = {
   completed: new Set(),
@@ -389,6 +365,7 @@ const gameFlow = {
   grandmaState: 'none',
   grandmaTalkStep: 0,
   choiceKind: null,
+  dialogueSequence: null,
   ateToday: false,
   cerealEver: false,
   fridgeEver: false,
@@ -415,6 +392,13 @@ const greetingEndingTaskIds = new Set(['apartment_door_887', 'cactus', 'guard', 
 function showEnding(endingId) {
   const ending = endingDefinitions[endingId];
   if (!ending) return;
+  const hiddenTaskId = endingId === 'hidden_sea' ? 'hidden_sea' : endingId === 'hidden_confession' ? 'friend_confession' : null;
+  if (hiddenTaskId) gameFlow.runTaskIds.add(hiddenTaskId);
+  for (const taskId of gameFlow.runTaskIds) gameFlow.unlockedTaskIds.add(taskId);
+  persistUnlockedTaskIds();
+  endingUI.view = 'summary';
+  endingUI.scrollY = 0;
+  endingUI.scrollTargetY = 0;
   gameFlow.selectedEnding = endingId;
   gameFlow.finale = { ...ending, taskIds: [...gameFlow.runTaskIds] };
   gameFlow.mode = 'finale';
@@ -437,8 +421,6 @@ function evaluateTaskEnding() {
 function completeTask(taskId) {
   gameFlow.completed.add(taskId);
   gameFlow.runTaskIds.add(taskId);
-  gameFlow.unlockedTaskIds.add(taskId);
-  persistUnlockedTaskIds();
   evaluateTaskEnding();
 }
 
@@ -452,16 +434,19 @@ const elevatorArrival = { startedAt: null, pendingDestination: null };
 const busJourney = { state: 'boarding', stopIndex: 0, sceneryOffset: 0, movingUntil: 0, stopStartedAt: null };
 const busStops = ['학교', '바다'];
 const taskCatalog = [
-  ['bed', 'BED', '#c6a9c7'], ['window', 'WND', '#79b9ba'], ['cactus', 'CAC', '#72966e'],
-  ['monitor_chat', 'CHAT', '#7c9dc7'], ['monitor_email', 'MAIL', '#8d82bb'],
-  ['cat_treats', 'TREAT', '#d2a96e'], ['cereal', 'CER', '#c89b68'], ['dishes', 'DISH', '#7ca7b8'],
-  ['apartment_door_887', '887', '#87a8c9'], ['stone', 'ROCK', '#70a6ac'], ['stairs_door', 'STAIR', '#b39ac8'],
-  ['flower', 'FLW', '#c49aca'], ['guard', 'HI', '#75a9c2'], ['tree_leaves', 'LEAF', '#71996a'],
-  ['cat_pet', 'PET', '#d99b69'], ['cat_feed', 'FEED', '#9fabc8'], ['bus_window', 'BUS', '#8bbfca'],
-  ['grandma_seat', 'SEAT', '#d2a3b3'], ['sign', 'SIGN', '#d0aa67'], ['stationery_game', 'GAME', '#d39879'],
-  ['poem', 'BOOK', '#a69acb'], ['piano_sound', 'PIANO', '#8caec8'], ['pocha_snack', 'FOOD', '#bd8b71'],
-  ['school_sign', 'SCHOOL', '#d0a967'], ['presentation', 'TALK', '#7095b8'], ['desks_align', 'DESK', '#c08e78'],
-  ['friend_confession', 'LOVE', '#d27e9f'],
+  ['bed', '이불 정리', '#f5d9e4'], ['window', '창문 열기', '#d5edfa'], ['cactus', '선인장 돌보기', '#83c978'],
+  ['monitor_chat', '메시지 보내기', '#96a4c4'], ['monitor_email', '메일 보내기', '#96a4c4'],
+  ['cat_treats', '고양이 간식', '#efc99d'], ['cereal', '시리얼 먹기', '#69c65a'], ['dishes', '설거지', '#9aacc8'],
+  ['apartment_door_887', '이웃에게 인사', '#e2b8d5'], ['stone', '돌 치우기', '#93b181'], ['stairs_door', '계단 내려가기', '#e2b8d5'],
+  ['flower', '꽃 향기 맡기', '#b9a2c7'], ['guard', '경비실 인사', '#739bb5'], ['tree_leaves', '나뭇잎 잡기', '#719d79'],
+  ['cat_pet', '고양이 쓰다듬기', '#d99b69'], ['cat_feed', '고양이 밥 주기', '#d99b69'], ['bus_window', '창밖 구경', '#d5edfa'],
+  ['grandma_seat', '자리 양보', '#8aa9a0'], ['stationery_game', '문방구 게임', '#d5edfa'],
+  ['poem', '서점 창문 읽기', '#d5edfa'], ['piano_sound', '피아노 듣기', '#d5edfa'], ['pocha_snack', '간식 사 먹기', '#d5edfa'],
+  ['school_sign', '팻말 세우기', '#b1c8b3'], ['presentation', '발표하기', '#718b76'], ['desks_align', '책상 정리', '#9aaf99'],
+];
+const hiddenTaskCatalog = [
+  ['hidden_sea', '바다 도착', '#8eb8c9'],
+  ['friend_confession', '친구에게 고백', '#d99eb5'],
 ];
 
 function loadUnlockedTaskIds() {
@@ -482,26 +467,26 @@ function persistUnlockedTaskIds() {
 }
 
 const endingDefinitions = {
-  hidden_sea: { title: '히든 엔딩-1: 일탈 엔딩', description: '익숙한 하루에서 벗어나 바다에 도착했다. 파도 소리를 들으며 오늘은 계획 없이 조금 더 머물기로 했다.', background: '#8eb8c9', panel: '#e5f1f0', accent: '#3e788b' },
-  hidden_confession: { title: '히든 엔딩-2: 고백 엔딩', description: '오래 좋아했던 친구와 집에서도 대화를 이어갔다. 서로의 마음을 확인한 두 사람은 연인이 되어 앞으로의 이야기를 함께 써 내려간다.', background: '#d99eb5', panel: '#fff0f4', accent: '#a94f78' },
-  kindness: { title: '일반 엔딩-1: 남들까지 행복하게 해준 하루', description: '작은 배려와 다정한 인사가 주변 사람들의 하루까지 환하게 만들었다.', background: '#e4c59d', panel: '#fff5e6', accent: '#b57845' },
-  self_happiness: { title: '일반 엔딩-2: 온전히 나만의 행복에 집중한 하루', description: '오늘은 내가 좋아하는 순간과 하고 싶은 일에 천천히 집중했다.', background: '#b9b0d5', panel: '#f4f0ff', accent: '#71629b' },
-  food_kindness: { title: '일반 엔딩-3: 풍족한 인심 (먹을 것)', description: '준비한 간식과 음식이 이웃과 고양이에게 이어져 넉넉하고 따뜻한 하루가 되었다.', background: '#e0b278', panel: '#fff3de', accent: '#a96838' },
-  nature_happiness: { title: '일반 엔딩-4: 자연과 함께 하는 행복한 하루', description: '바람과 나뭇잎, 작은 생명들을 바라보며 자연 가까이에서 평온한 하루를 보냈다.', background: '#9ab9a0', panel: '#edf6e9', accent: '#527b58' },
-  greetings: { title: '일반 엔딩-5: 인사하는 행복', description: '먼저 건넨 인사와 다정한 마음이 낯선 이웃까지 웃게 했다.', background: '#e0a6a0', panel: '#fff0eb', accent: '#a95755' },
+  hidden_sea: { title: '바다에 도착한 날', description: '익숙한 하루에서 벗어나 파도 소리를 들으며 계획 없이 머물렀다.', background: '#8eb8c9', panel: '#e5f1f0', accent: '#3e788b' },
+  hidden_confession: { title: '서로의 마음', description: '오래 좋아했던 친구와 마음을 나누고 앞으로의 이야기를 함께 시작했다.', background: '#d99eb5', panel: '#fff0f4', accent: '#a94f78' },
+  kindness: { title: '다정한 하루', description: '작은 배려와 다정한 인사가 주변 사람들의 하루까지 환하게 만들었다.', background: '#e4c59d', panel: '#fff5e6', accent: '#b57845' },
+  self_happiness: { title: '나만의 행복', description: '오늘은 내가 좋아하는 순간과 하고 싶은 일에 천천히 집중했다.', background: '#b9b0d5', panel: '#f4f0ff', accent: '#71629b' },
+  food_kindness: { title: '넉넉한 마음', description: '준비한 간식과 음식이 이웃과 고양이에게 이어져 따뜻한 하루가 되었다.', background: '#e0b278', panel: '#fff3de', accent: '#a96838' },
+  nature_happiness: { title: '자연과 함께', description: '바람과 나뭇잎, 작은 생명들을 바라보며 평온한 하루를 보냈다.', background: '#9ab9a0', panel: '#edf6e9', accent: '#527b58' },
+  greetings: { title: '먼저 건넨 인사', description: '먼저 건넨 인사와 다정한 마음이 낯선 이웃까지 웃게 했다.', background: '#e0a6a0', panel: '#fff0eb', accent: '#a95755' },
 };
 
 const sceneActivities = {
   home: [
-    { id: 'bed', x: 150, bounds: { x: 15, y: 198, width: 275, height: 97 }, label: '이불 정리하기', text: '침대 이불을 가지런히 정리했다.' },
+    { id: 'bed', x: 150, bounds: { x: 0, y: 198, width: 290, height: 122 }, label: '이불 정리하기', text: '침대 이불을 가지런히 정리했다.' },
     { id: 'window', x: 460, bounds: { x: 367, y: 74, width: 187, height: 123 }, label: '창문 열고 바람 맞기', text: '창문을 열고 시원한 바람을 맞았다.' },
-    { id: 'cactus', x: 763, bounds: { x: 749, y: 144, width: 29, height: 64 }, label: '선인장에게 말 걸기', text: '선인장에게 말을 걸어본다. 오늘도 잘 지내자.' },
-    { id: 'monitor', x: 890, bounds: { x: 850, y: 126, width: 80, height: 66 }, label: '모니터 과제 하기', kind: 'monitor' },
+    { id: 'cactus', x: 763, bounds: { x: 742, y: 144, width: 42, height: 64 }, label: '선인장에게 말 걸기', text: '선인장에게 말을 걸어본다. 오늘도 잘 지내자.' },
+    { id: 'monitor', x: 890, bounds: { x: 850, y: 126, width: 80, height: 84 }, label: '모니터 과제 하기', kind: 'monitor' },
   ],
   bus: [
     { id: 'bus_window', x: 650, bounds: { x: 576, y: 62, width: 150, height: 100 }, label: '버스 창밖 구경하기', text: '버스 창밖으로 지나가는 풍경을 구경했다.' },
     { id: 'bus_exit', x: 846, bounds: { x: 758, y: 58, width: 176, height: 262 }, label: '버스에서 내리기', kind: 'leaveBus' },
-    { id: 'bus_seat_right', x: 621, bounds: { x: 596, y: 177, width: 50, height: 143 }, label: '버스 오른쪽 자리에 앉기', kind: 'busRightSeat', seatX: 621, seatY: 248 },
+    { id: 'bus_seat_left', x: 81, bounds: { x: 56, y: 177, width: 50, height: 143 }, label: '버스 자리에 앉기', kind: 'busSeat', seatX: 81, seatY: 248 },
   ],
   living_room: [
     { id: 'kitchen_chair', x: 573, bounds: { x: 548, y: 177, width: 50, height: 143 }, label: '의자에 앉기', kind: 'seat', seatX: 573, seatY: 248 },
@@ -510,7 +495,7 @@ const sceneActivities = {
     { id: 'dishes', x: 185, bounds: { x: 133, y: 165, width: 99, height: 27 }, label: '설거지하기', kind: 'dishes', text: '사용한 그릇을 깨끗이 씻는다. 부엌이 한결 산뜻해졌다.' },
   ],
   apartment_hallway: [
-    { id: 'apartment_door_887', x: 190, bounds: { x: 130, y: 84, width: 120, height: 236 }, label: '887호 문 두드리기', kind: 'neighborDoor' },
+    { id: 'apartment_door_887', x: 295, bounds: { x: 279, y: 222, width: 39, height: 100 }, label: '이웃집 아이에게 인사하기', kind: 'neighborChild' },
     { id: 'apartment_door_888', x: 480, bounds: { x: 420, y: 84, width: 120, height: 236 }, label: '888호 들어가기', kind: 'apartmentDoor' },
   ],
   elevator: [
@@ -524,16 +509,15 @@ const sceneActivities = {
   ],
   bus_stop: [
     { id: 'bus_stop_bench', x: 650 - BUS_STOP_LEFT_SHIFT, bounds: { x: 585 - BUS_STOP_LEFT_SHIFT, y: 255, width: 260, height: 65 }, label: '정류장 의자에 앉기', kind: 'seat', seatX: 650 - BUS_STOP_LEFT_SHIFT, seatY: 255 },
-    { id: 'tree_leaves', x: 205, bounds: { x: 150, y: 0, width: 110, height: 320 }, label: '나뭇잎 잡기', text: '높은 나뭇잎을 잡아보았다.' },
-    { id: 'cat_pet', x: 390, bounds: { x: 350, y: 270, width: 80, height: 50 }, label: '고양이 쓰다듬기', kind: 'catTask' },
-    { id: 'cat_feed', x: 390, bounds: { x: 350, y: 270, width: 80, height: 50 }, label: '고양이에게 간식 주기', kind: 'catTask' },
+    { id: 'tree_leaves', x: 137.5, bounds: { x: 68.5, y: 50, width: 138, height: 270 }, label: '나뭇잎 잡기', text: '높은 나뭇잎을 잡아보았다.' },
+    { id: 'cat_pet', x: 391, bounds: { x: 360, y: 272, width: 63, height: 48 }, label: '고양이 쓰다듬기', kind: 'catTask' },
+    { id: 'cat_feed', x: 391, bounds: { x: 360, y: 272, width: 63, height: 48 }, label: '고양이에게 간식 주기', kind: 'catTask' },
   ],
   street: [
-    { id: 'sign', x: 80, bounds: { x: 34, y: 96, width: 216, height: 25 }, label: '간판 자세히 보기', text: '문방구 간판을 자세히 살펴보았다.' },
-    { id: 'stationery_game', x: 210, bounds: { x: 170, y: 165, width: 80, height: 112 }, label: '문방구 게임하기', text: '문방구 앞 게임기를 플레이했다.' },
-    { id: 'poem', x: 430, bounds: { x: 355, y: 70, width: 155, height: 192 }, label: '서점 유리창 너머 글귀 읽기', text: '서점 유리창 너머의 글귀를 천천히 읽어보았다.' },
-    { id: 'piano_sound', x: 625, bounds: { x: 530, y: 78, width: 190, height: 242 }, label: '피아노 소리에 몸 맡기기', text: '들려오는 피아노 소리에 몸을 맡겼다.' },
-    { id: 'pocha_snack', x: 850, bounds: { x: 752, y: 110, width: 188, height: 210 }, label: '포장마차에서 간식 사먹기', text: '포장마차에서 간식을 사먹었다.' },
+    { id: 'stationery_game', x: 210, bounds: { x: 168, y: 208, width: 64, height: 112 }, label: '문방구 게임하기', text: '문방구 앞 게임기를 플레이했다.' },
+    { id: 'poem', x: 430, bounds: { x: 300, y: 98, width: 165, height: 198 }, label: '서점 창문 바라보기', text: '서점 창문 너머를 바라보았다.' },
+    { id: 'piano_sound', x: 625, bounds: { x: 540, y: 118, width: 165, height: 178 }, label: '피아노 소리에 몸 맡기기', text: '들려오는 피아노 소리에 몸을 맡겼다.' },
+    { id: 'pocha_snack', x: 850, bounds: { x: 750, y: 85, width: 190, height: 235 }, label: '포장마차에서 간식 사먹기', text: '포장마차에서 간식을 사먹었다.' },
   ],
   sea: [],
   school: [
@@ -625,10 +609,12 @@ function changeScene(sceneId, spawnX) {
 
 function currentActivities() {
   const activities = (sceneActivities[currentSceneId] || []).filter(activity => {
+    if (activity.id === 'monitor' && !gameFlow.hiddenConfessionActive) return false;
+    if (activity.id === 'fridge') return !gameFlow.completed.has('cat_treats');
     if (activity.id === 'cereal') return player.sitting?.seatId === 'kitchen_chair';
     if (activity.id === 'cat_pet') return !gameFlow.completed.has('cat_pet');
     if (activity.id === 'cat_feed') return gameFlow.completed.has('cat_pet') && !gameFlow.completed.has('cat_feed');
-    if (activity.id === 'bus_seat_right') return busJourney.state === 'boarding' && !player.sitting;
+    if (activity.id === 'bus_seat_left') return busJourney.state === 'boarding' && !player.sitting;
     return true;
   });
   if (gameFlow.hiddenConfessionActive && currentSceneId === 'home') {
@@ -729,8 +715,13 @@ function chooseBusPrompt(answer) {
       beginBusTravel();
       return;
     }
-    gameFlow.grandmaState = 'talking';
+    gameFlow.grandmaState = 'seatedTalking';
     gameFlow.grandmaTalkStep = 1;
+    player.sitting = null;
+    player.x = 200;
+    player.y = PLAYER_BASE_Y;
+    player.facing = -1;
+    player.state = 'IDLE';
     gameFlow.dialogue = '할머니: 자리를 양보해줘서 고맙구나. 다리가 조금 아팠단다.';
     setFlowMode('dialogue', 30000);
     return;
@@ -756,6 +747,13 @@ function chooseBusPrompt(answer) {
   }
 }
 
+function startTaskDialogue(taskId, lines) {
+  gameFlow.dialogueSequence = { taskId, lines, index: 0 };
+  gameFlow.dialogue = lines[0];
+  gameFlow.activityMotion = null;
+  setFlowMode('dialogue', 3600000);
+}
+
 function interactWith(activity) {
   if (gameFlow.hiddenConfessionActive && activity.id !== 'monitor') return;
   window.soundEngine.playInteractionSelect();
@@ -779,18 +777,35 @@ function interactWith(activity) {
   }
 
   if (activity.id === 'apartment_door_887') {
-    completeTask('apartment_door_887');
-    gameFlow.dialogue = '동생은 오늘 있었던 일을 쫑알쫑알 들려준다. 너무 귀여워서 주머니를 뒤져 사탕을 건넸다.';
-    gameFlow.activityMotion = null;
-    setFlowMode('dialogue');
+    startTaskDialogue('apartment_door_887', [
+      '아이: 안녕하세요! 오늘 하루는 어땠어요?',
+      '나: 학교에서 발표도 하고, 작은 일들을 해봤어. 너는 오늘 뭐 했니?',
+      '아이: 저는 그림을 그렸어요! 다음에 또 이야기해요.',
+      '나: 그래, 다음에 또 보자. 사탕도 하나 줄게.',
+    ]);
+    return;
+  }
+
+  if (activity.id === 'presentation') {
+    player.facing = 1;
+    startTaskDialogue('presentation', [
+      '선생님: 준비한 발표를 들려줄래요?',
+      '나: 오늘은 익숙한 하루 속에서 발견한 작은 친절을 이야기하겠습니다.',
+      '나: 먼저 인사하고 주변을 살피니 평범한 하루도 조금 달라졌습니다.',
+      '선생님: 차분하고 좋은 발표였어요. 잘 들었습니다.',
+    ]);
     return;
   }
 
   if (activity.id === 'stairs_door') {
-    completeTask('stairs_door');
-    gameFlow.dialogue = '계단으로 내려왔더니 숨이 찼다. 별것 아니지만 건강해진 느낌이다.';
-    gameFlow.activityMotion = null;
-    setFlowMode('dialogue');
+    if (!gameFlow.completed.has('stairs_door')) {
+      completeTask('stairs_door');
+      gameFlow.dialogue = '계단으로 내려왔더니 숨이 찼다. 별것 아니지만 건강해진 느낌이다.';
+      gameFlow.activityMotion = null;
+      setFlowMode('dialogue');
+    } else {
+      setFlowMode(null);
+    }
     sceneTransition.start('home_front', 70);
     return;
   }
@@ -856,10 +871,10 @@ function interactWith(activity) {
     return;
   }
 
-  if (activity.kind === 'busRightSeat') {
+  if (activity.kind === 'busSeat') {
     player.x = activity.seatX;
     player.y = PLAYER_BASE_Y;
-    player.facing = -1;
+    player.facing = 1;
     player.state = 'IDLE';
     player.sitting = { seatY: activity.seatY, seatId: activity.id };
     if (gameFlow.completed.has('grandma_seat')) {
@@ -868,11 +883,11 @@ function interactWith(activity) {
       return;
     }
     busJourney.state = 'stopped';
-    gameFlow.grandmaState = 'approach';
+    gameFlow.grandmaState = 'waiting';
     gameFlow.grandmaStartedAt = performance.now();
-    gameFlow.dialogue = '할머니가 버스 문에서 다가와 앞에 섰다. 할머니가 서 계신다. 자리를 비켜드릴까?';
+    gameFlow.dialogue = null;
     gameFlow.activityMotion = null;
-    setFlowMode('dialogue', 30000);
+    gameFlow.mode = 'grandmaWaiting';
     return;
   }
 
@@ -1039,15 +1054,30 @@ function handleGameFlowKey(event) {
   }
 
   if (gameFlow.mode === 'dialogue') {
-    if (event.code === 'Space' || event.key === ' ') {
+    if (event.code === 'Space' || event.key === ' ' || event.key === 'Enter') {
       event.preventDefault();
+      if (gameFlow.dialogueSequence) {
+        gameFlow.dialogueSequence.index++;
+        if (gameFlow.dialogueSequence.index >= gameFlow.dialogueSequence.lines.length) {
+          const taskId = gameFlow.dialogueSequence.taskId;
+          gameFlow.dialogueSequence = null;
+          gameFlow.dialogue = null;
+          gameFlow.activityMotion = null;
+          completeTask(taskId);
+          setFlowMode(null);
+        } else {
+          gameFlow.dialogue = gameFlow.dialogueSequence.lines[gameFlow.dialogueSequence.index];
+          setFlowMode('dialogue', 3600000);
+        }
+        return true;
+      }
       if (gameFlow.grandmaState === 'approach') {
         gameFlow.choiceKind = 'grandma';
         gameFlow.dialogue = '할머니께 자리를 양보할까?';
         setFlowMode('choice');
         return true;
       }
-      if (gameFlow.grandmaState === 'talking') {
+      if (gameFlow.grandmaState === 'seatedTalking') {
         if (gameFlow.grandmaTalkStep === 1) {
           gameFlow.grandmaTalkStep = 2;
           gameFlow.dialogue = '할머니: 고맙다. 이건 선물이란다.';
@@ -1056,8 +1086,10 @@ function handleGameFlowKey(event) {
           gameFlow.hasRabbitPlush = true;
           completeTask('grandma_seat');
           player.sitting = null;
-          player.x = 690;
+          player.x = 200;
+          player.y = PLAYER_BASE_Y;
           player.facing = -1;
+          player.state = 'IDLE';
           gameFlow.dialogue = '할머니가 분홍 토끼 인형을 건넸다. 인형을 셔츠 앞주머니에 반쯤 넣었다.';
           gameFlow.grandmaTalkStep = 0;
           busJourney.state = 'moving';
@@ -1075,10 +1107,20 @@ function handleGameFlowKey(event) {
   }
 
   if (gameFlow.mode === 'finale') {
-    if (event.key === 'e' || event.key === 'E' || event.key === 'Enter' || event.key === ' ') {
-      gameFlow.finale = null;
-      gameFlow.mode = null;
-      gameFlow.selectedEnding = null;
+    if (endingUI.view === 'collection' && (event.key === 'ArrowDown' || event.key === 'PageDown')) {
+      endingUI.scrollTargetY = Math.min(endingScrollMax(), endingUI.scrollTargetY + 56);
+    } else if (endingUI.view === 'collection' && (event.key === 'ArrowUp' || event.key === 'PageUp')) {
+      endingUI.scrollTargetY = Math.max(0, endingUI.scrollTargetY - 56);
+    } else if (endingUI.view === 'collection' && event.key === 'Home') {
+      endingUI.scrollTargetY = 0;
+    } else if (endingUI.view === 'collection' && event.key === 'End') {
+      endingUI.scrollTargetY = endingScrollMax();
+    } else if (event.key === 'Escape') {
+      if (endingUI.view === 'collection') {
+        endingUI.view = 'summary';
+        endingUI.scrollY = 0;
+        endingUI.scrollTargetY = 0;
+      }
     }
     event.preventDefault();
     return true;
@@ -1110,7 +1152,21 @@ function updateGameFlow(deltaSeconds) {
     return;
   }
 
-  if (gameFlow.mode === 'dialogue' && performance.now() >= gameFlow.dialogueUntil) {
+  if (gameFlow.mode === 'grandmaWaiting' && performance.now() - gameFlow.grandmaStartedAt >= 4000) {
+    gameFlow.grandmaState = 'entering';
+    gameFlow.grandmaStartedAt = performance.now();
+    gameFlow.dialogue = null;
+    gameFlow.mode = 'grandmaEntering';
+  }
+
+  if (gameFlow.mode === 'grandmaEntering' && performance.now() - gameFlow.grandmaStartedAt >= 3600) {
+    gameFlow.grandmaState = 'approach';
+    gameFlow.grandmaStartedAt = performance.now();
+    gameFlow.dialogue = '할머니가 버스 문에서 다가와 앞에 섰다. 할머니가 서 계신다. 자리를 비켜드릴까?';
+    setFlowMode('dialogue', 30000);
+  }
+
+  if (gameFlow.mode === 'dialogue' && !gameFlow.dialogueSequence && performance.now() >= gameFlow.dialogueUntil) {
     gameFlow.mode = null;
     gameFlow.dialogue = null;
     gameFlow.activityMotion = null;
@@ -1184,7 +1240,7 @@ function updateGameFlow(deltaSeconds) {
   } else if (!gameFlow.mode && !player.sitting) {
     let nearestDistance = 82;
     for (const activity of currentActivities()) {
-      if (gameFlow.completed.has(activity.id)) continue;
+      if (gameFlow.completed.has(activity.id) && !['stairs_door', 'school_main_door'].includes(activity.id)) continue;
       const distance = Math.abs(player.x - activity.x);
       if (distance < nearestDistance) {
         nearestDistance = distance;
@@ -1205,7 +1261,50 @@ function drawNearbyActivityHighlight(ctx) {
   ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
   ctx.shadowBlur = 5;
 
-  if (activity.id.startsWith('bus_seat_')) {
+  if (activity.id === 'bed') {
+    ctx.beginPath();
+    ctx.moveTo(0, 198);
+    ctx.lineTo(15, 198);
+    ctx.lineTo(15, 238);
+    ctx.lineTo(290, 238);
+    ctx.lineTo(290, 298);
+    ctx.lineTo(270, 298);
+    ctx.lineTo(270, 320);
+    ctx.lineTo(255, 320);
+    ctx.lineTo(255, 298);
+    ctx.lineTo(35, 298);
+    ctx.lineTo(35, 320);
+    ctx.lineTo(20, 320);
+    ctx.lineTo(20, 298);
+    ctx.lineTo(0, 298);
+    ctx.closePath();
+    ctx.stroke();
+  } else if (activity.id === 'window') {
+    const paneWidth = 82;
+    const paneHeight = 123;
+    const windowLeft = 460.5 - (paneWidth * 2 + ROOM_WINDOW_PANE_GAP) / 2;
+    ctx.strokeRect(windowLeft, 74, paneWidth, paneHeight);
+    ctx.strokeRect(windowLeft + paneWidth + ROOM_WINDOW_PANE_GAP, 74, paneWidth, paneHeight);
+  } else if (activity.id === 'monitor') {
+    ctx.beginPath();
+    ctx.moveTo(850, 126);
+    ctx.lineTo(930, 126);
+    ctx.lineTo(930, 192);
+    ctx.lineTo(897, 192);
+    ctx.lineTo(897, 206);
+    ctx.lineTo(911, 206);
+    ctx.lineTo(911, 210);
+    ctx.lineTo(869, 210);
+    ctx.lineTo(869, 206);
+    ctx.lineTo(883, 206);
+    ctx.lineTo(883, 192);
+    ctx.lineTo(850, 192);
+    ctx.closePath();
+    ctx.stroke();
+  } else if (activity.id === 'bus_exit') {
+    ctx.strokeRect(758, 58, 86, 262);
+    ctx.strokeRect(848, 58, 86, 262);
+  } else if (activity.id.startsWith('bus_seat_')) {
     ctx.translate(bounds.x, 0);
     ctx.beginPath();
     ctx.moveTo(0, 177);
@@ -1271,7 +1370,50 @@ function drawNearbyActivityHighlight(ctx) {
     ctx.closePath();
     ctx.stroke();
   } else if (activity.id === 'cactus') {
-    traceCactus(ctx);
+    ctx.beginPath();
+    ctx.moveTo(742, GROUND_Y - 144);
+    ctx.lineTo(757, GROUND_Y - 144);
+    ctx.lineTo(757, GROUND_Y - 156);
+    ctx.lineTo(749, GROUND_Y - 156);
+    ctx.lineTo(749, GROUND_Y - 171);
+    ctx.lineTo(754, GROUND_Y - 171);
+    ctx.lineTo(754, GROUND_Y - 161);
+    ctx.lineTo(757, GROUND_Y - 161);
+    ctx.lineTo(757, GROUND_Y - 176);
+    ctx.lineTo(769, GROUND_Y - 176);
+    ctx.lineTo(769, GROUND_Y - 154);
+    ctx.lineTo(773, GROUND_Y - 154);
+    ctx.lineTo(773, GROUND_Y - 164);
+    ctx.lineTo(778, GROUND_Y - 164);
+    ctx.lineTo(778, GROUND_Y - 149);
+    ctx.lineTo(769, GROUND_Y - 149);
+    ctx.lineTo(769, GROUND_Y - 144);
+    ctx.lineTo(784, GROUND_Y - 144);
+    ctx.lineTo(778, GROUND_Y - 112);
+    ctx.lineTo(748, GROUND_Y - 112);
+    ctx.closePath();
+    ctx.stroke();
+  } else if (activity.id === 'apartment_door_887') {
+    ctx.beginPath();
+    ctx.moveTo(285.5, 222);
+    ctx.lineTo(317.8, 222);
+    ctx.lineTo(317.8, 243);
+    ctx.lineTo(300.7, 243);
+    ctx.lineTo(300.7, 250);
+    ctx.lineTo(305.1, 250);
+    ctx.lineTo(305.1, 285);
+    ctx.lineTo(300.7, 285);
+    ctx.lineTo(300.7, 290);
+    ctx.lineTo(300.7, 319);
+    ctx.lineTo(312.1, 322);
+    ctx.lineTo(285.5, 322);
+    ctx.lineTo(285.5, 290);
+    ctx.lineTo(285.5, 285);
+    ctx.lineTo(279.2, 285);
+    ctx.lineTo(279.2, 251);
+    ctx.lineTo(285.5, 251);
+    ctx.lineTo(285.5, 243);
+    ctx.closePath();
     ctx.stroke();
   } else if (activity.id === 'elevator_door') {
     ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
@@ -1310,6 +1452,49 @@ function drawNearbyActivityHighlight(ctx) {
     ctx.lineTo(332, 238);
     ctx.closePath();
     ctx.stroke();
+  } else if (activity.id === 'tree_leaves') {
+    ctx.beginPath();
+    ctx.moveTo(68.5, 50);
+    ctx.lineTo(206.5, 50);
+    ctx.lineTo(206.5, 188);
+    ctx.lineTo(149.5, 188);
+    ctx.lineTo(149.5, 320);
+    ctx.lineTo(125.5, 320);
+    ctx.lineTo(125.5, 188);
+    ctx.lineTo(68.5, 188);
+    ctx.closePath();
+    ctx.stroke();
+  } else if (activity.id === 'cat_pet' || activity.id === 'cat_feed') {
+    ctx.beginPath();
+    ctx.moveTo(366, 286);
+    ctx.lineTo(366, 304);
+    ctx.lineTo(410, 304);
+    ctx.lineTo(410, 298);
+    ctx.lineTo(423, 298);
+    ctx.lineTo(423, 278);
+    ctx.lineTo(421, 278);
+    ctx.lineTo(421, 272);
+    ctx.lineTo(415, 272);
+    ctx.lineTo(415, 278);
+    ctx.lineTo(411, 278);
+    ctx.lineTo(402, 286);
+    ctx.lineTo(411, 272);
+    ctx.lineTo(405, 272);
+    ctx.lineTo(405, 278);
+    ctx.lineTo(402, 278);
+    ctx.lineTo(402, 286);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(360, 278);
+    ctx.lineTo(372, 278);
+    ctx.lineTo(372, 283);
+    ctx.lineTo(365, 283);
+    ctx.lineTo(365, 292);
+    ctx.lineTo(360, 292);
+    ctx.closePath();
+    ctx.stroke();
+    for (const legX of [372, 384, 400, 412]) ctx.strokeRect(legX, 300, 6, 20);
   } else if (activity.id === 'friend') {
     ctx.beginPath();
     ctx.moveTo(459, 210);
@@ -1337,12 +1522,27 @@ function drawNearbyActivityHighlight(ctx) {
     ctx.closePath();
     ctx.stroke();
   } else if (activity.id === 'presentation') {
-    ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
+    ctx.strokeRect(177.75, 28.23, 604.5, 155.54);
+    ctx.strokeRect(186, 36.48, 588, 139.04);
+  } else if (activity.id === 'desks_align') {
+    const deskX = 60;
+    const chairCenterX = deskX + 90.375;
+    ctx.beginPath();
+    ctx.rect(deskX, 216, 180.75, 11);
+    ctx.rect(deskX + 14, 227, 11, 93);
+    ctx.rect(deskX + 155.75, 227, 11, 93);
+    ctx.rect(chairCenterX - 26, 220, 8, 32);
+    ctx.rect(chairCenterX - 25, 252, 50, 8);
+    ctx.rect(chairCenterX - 21, 260, 7, 60);
+    ctx.rect(chairCenterX + 14, 260, 7, 60);
+    ctx.stroke();
   } else if (activity.id === 'football') {
     ctx.strokeRect(706, 286, 15, 15);
-  } else if (activity.id === 'sign') {
+  } else if (activity.id === 'stationery_game') {
     ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
   } else if (activity.id === 'poem') {
+    ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
+  } else if (activity.id === 'piano_sound') {
     ctx.strokeRect(bounds.x, bounds.y, bounds.width, bounds.height);
   } else if (activity.id === 'arrived_bus') {
     ctx.strokeRect(busArrival.x, 48, 697, 272);
@@ -1442,85 +1642,266 @@ function drawMonitorTaskOverlay(ctx) {
   ctx.fillText(task.error ? '문장이 정확히 일치하지 않습니다. 고쳐서 다시 입력하세요.' : '문장을 완벽하게 입력하면 자동으로 완료됩니다 · Esc 닫기', 112, 258, 728);
 }
 
+function drawTaskIllustration(ctx, taskId, centerX, centerY, color) {
+  ctx.save();
+  ctx.translate(centerX, centerY);
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  const fillRect = (x, y, width, height) => ctx.fillRect(x, y, width, height);
+  const line = (...points) => {
+    ctx.beginPath();
+    ctx.moveTo(points[0], points[1]);
+    for (let index = 2; index < points.length; index += 2) ctx.lineTo(points[index], points[index + 1]);
+    ctx.stroke();
+  };
+
+  switch (taskId) {
+    case 'bed':
+      fillRect(-18, -5, 36, 16); fillRect(-18, 11, 4, 8); fillRect(14, 11, 4, 8);
+      ctx.fillStyle = '#ffffff'; fillRect(-14, -2, 11, 8); break;
+    case 'window':
+      ctx.strokeRect(-17, -17, 34, 34); line(0, -17, 0, 17); line(-17, 0, 17, 0); break;
+    case 'cactus':
+      fillRect(-5, -12, 10, 25); fillRect(-13, -3, 8, 5); fillRect(-13, -10, 5, 12); fillRect(5, 2, 8, 5); fillRect(8, -5, 5, 12); fillRect(-13, 14, 26, 6); break;
+    case 'monitor_chat':
+      ctx.beginPath(); ctx.roundRect(-17, -13, 34, 24, 5); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(-7, 11); ctx.lineTo(-12, 18); ctx.lineTo(1, 11); ctx.fill();
+      line(-9, -5, 9, -5); line(-9, 2, 5, 2); break;
+    case 'monitor_email':
+      ctx.fillRect(-18, -13, 36, 26); line(-18, -12, 0, 2, 18, -12); line(-18, 12, -5, 0); line(18, 12, 5, 0); break;
+    case 'cat_treats':
+    case 'cat_feed':
+      ctx.beginPath(); ctx.moveTo(-18, 2); ctx.lineTo(18, 2); ctx.lineTo(13, 15); ctx.lineTo(-13, 15); ctx.closePath(); ctx.fill();
+      line(-20, 1, 20, 1); ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(-7, -7, 3, 0, Math.PI * 2); ctx.arc(2, -12, 3, 0, Math.PI * 2); ctx.arc(10, -5, 3, 0, Math.PI * 2); ctx.fill(); break;
+    case 'cereal':
+      ctx.beginPath(); ctx.moveTo(-17, -2); ctx.lineTo(17, -2); ctx.lineTo(12, 14); ctx.lineTo(-12, 14); ctx.closePath(); ctx.fill();
+      line(-18, -3, 18, -3); ctx.fillStyle = '#fff2bf'; fillRect(-10, -12, 4, 8); fillRect(-1, -17, 4, 13); fillRect(8, -10, 4, 6); break;
+    case 'dishes':
+      ctx.beginPath(); ctx.ellipse(0, 4, 18, 12, 0, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(0, 4, 10, 6, 0, 0, Math.PI * 2); ctx.stroke(); line(12, -17, 18, -10, 12, -4); break;
+    case 'apartment_door_887':
+      ctx.strokeRect(-12, -18, 24, 37); ctx.beginPath(); ctx.arc(2, -8, 5, Math.PI, 0); ctx.stroke(); fillRect(-3, -2, 10, 17); fillRect(6, 5, 2, 2); break;
+    case 'stone':
+      ctx.beginPath(); ctx.moveTo(-17, 11); ctx.lineTo(-12, -3); ctx.lineTo(-3, -14); ctx.lineTo(12, -10); ctx.lineTo(18, 8); ctx.closePath(); ctx.fill(); break;
+    case 'stairs_door':
+      line(-16, 15, -16, -14, -3, -14, -3, -4, 8, -4, 8, 6, 18, 6, 18, 15); break;
+    case 'flower':
+      line(0, 1, 0, 18); line(0, 10, -10, 5); line(0, 13, 10, 7);
+      ctx.beginPath(); ctx.arc(0, -7, 5, 0, Math.PI * 2); ctx.arc(-8, -7, 5, 0, Math.PI * 2); ctx.arc(8, -7, 5, 0, Math.PI * 2); ctx.arc(0, -15, 5, 0, Math.PI * 2); ctx.fill(); break;
+    case 'guard':
+      fillRect(-19, -13, 38, 28); fillRect(-23, -18, 46, 6); ctx.fillStyle = '#ffffff'; fillRect(-13, -8, 26, 13); break;
+    case 'tree_leaves':
+      fillRect(-4, 0, 8, 19); ctx.beginPath(); ctx.arc(0, -8, 15, 0, Math.PI * 2); ctx.arc(-11, 0, 9, 0, Math.PI * 2); ctx.arc(11, 0, 9, 0, Math.PI * 2); ctx.fill(); break;
+    case 'cat_pet':
+      ctx.beginPath(); ctx.moveTo(-16, -2); ctx.lineTo(-17, -16); ctx.lineTo(-7, -10); ctx.lineTo(7, -10); ctx.lineTo(17, -16); ctx.lineTo(16, 3); ctx.quadraticCurveTo(0, 18, -16, 3); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(-7, -1, 2, 0, Math.PI * 2); ctx.arc(7, -1, 2, 0, Math.PI * 2); ctx.fill(); break;
+    case 'bus_window':
+      fillRect(-19, -15, 38, 29); ctx.fillStyle = '#ffffff'; fillRect(-15, -11, 30, 21); ctx.fillStyle = color; fillRect(-12, 1, 8, 6); fillRect(0, -5, 8, 12); break;
+    case 'grandma_seat':
+      line(-15, 12, 15, 12); line(-12, 12, -12, 18); line(12, 12, 12, 18); ctx.beginPath(); ctx.arc(-3, -10, 5, 0, Math.PI * 2); ctx.fill(); fillRect(-9, -4, 13, 15); ctx.fillStyle = '#db7889'; ctx.font = 'bold 15px sans-serif'; ctx.fillText('♥', 7, -7); break;
+    case 'stationery_game':
+      fillRect(-13, -19, 26, 38); ctx.fillStyle = '#ffffff'; fillRect(-9, -14, 18, 19); fillRect(-5, 9, 10, 4); break;
+    case 'poem':
+      ctx.beginPath(); ctx.moveTo(-18, -12); ctx.quadraticCurveTo(-7, -16, 0, -9); ctx.quadraticCurveTo(8, -16, 18, -12); ctx.lineTo(18, 15); ctx.quadraticCurveTo(6, 9, 0, 16); ctx.quadraticCurveTo(-8, 9, -18, 15); ctx.closePath(); ctx.fill(); line(0, -9, 0, 14); break;
+    case 'piano_sound':
+      fillRect(-19, -13, 38, 27); ctx.fillStyle = '#ffffff'; fillRect(-16, 3, 32, 8); ctx.fillStyle = color;
+      for (let keyX = -11; keyX <= 9; keyX += 10) fillRect(keyX, 2, 3, 6); break;
+    case 'pocha_snack':
+      line(-17, -8, -13, -18, 13, -18, 17, -8); fillRect(-17, -8, 34, 5); fillRect(-14, -3, 4, 17); fillRect(10, -3, 4, 17); line(-18, 13, 18, 13);
+      ctx.beginPath(); ctx.arc(-11, 18, 4, 0, Math.PI * 2); ctx.arc(11, 18, 4, 0, Math.PI * 2); ctx.fill(); break;
+    case 'school_sign':
+      fillRect(-17, -15, 34, 20); line(0, 5, 0, 19); line(-9, 19, 9, 19); line(-10, -8, 10, -8); break;
+    case 'presentation':
+      fillRect(-18, -15, 36, 25); ctx.fillStyle = '#ffffff'; line(-12, -8, 11, -8); line(-12, -1, 5, -1); line(-12, 6, 8, 6); line(-10, 10, -10, 18); line(10, 10, 10, 18); break;
+    case 'desks_align':
+      fillRect(-19, -7, 38, 7); line(-14, 0, -14, 17); line(14, 0, 14, 17); fillRect(-8, -17, 16, 8); break;
+    case 'hidden_sea':
+      line(-19, -5, -11, -10, -3, -5, 5, -10, 13, -5, 19, -9); line(-19, 5, -11, 0, -3, 5, 5, 0, 13, 5, 19, 1); line(-19, 15, -11, 10, -3, 15, 5, 10, 13, 15, 19, 11); break;
+    case 'friend_confession':
+      ctx.beginPath(); ctx.moveTo(0, 15); ctx.bezierCurveTo(-25, 0, -12, -16, 0, -7); ctx.bezierCurveTo(12, -16, 25, 0, 0, 15); ctx.fill(); break;
+  }
+  ctx.restore();
+}
+
+function endingScrollMax() {
+  const contentHeight = Math.ceil(taskCatalog.length / 5) * 92 + 16 + 18 + 68;
+  return Math.max(0, contentHeight - (endingUI.scrollBottom - endingUI.scrollTop));
+}
+
+function updateEndingScroll(deltaSeconds) {
+  if (gameFlow.mode !== 'finale' || endingUI.view !== 'collection') return;
+  const maxScroll = endingScrollMax();
+  endingUI.scrollTargetY = Math.max(0, Math.min(maxScroll, endingUI.scrollTargetY));
+  const follow = Math.min(0.18, deltaSeconds * 3.5);
+  endingUI.scrollY += (endingUI.scrollTargetY - endingUI.scrollY) * follow;
+  if (Math.abs(endingUI.scrollTargetY - endingUI.scrollY) < 0.2) endingUI.scrollY = endingUI.scrollTargetY;
+}
+
 function drawEndingOverlay(ctx) {
   const ending = gameFlow.finale;
   if (!ending) return;
+  const panelX = 150;
+  const panelY = 24;
+  const panelWidth = 660;
+  const panelHeight = 272;
+
   ctx.save();
   ctx.translate(camera.x, 0);
-  ctx.fillStyle = ending.background;
+  endingBackdropContext.clearRect(0, 0, endingBackdrop.width, endingBackdrop.height);
+  endingBackdropContext.drawImage(canvas, 0, 0);
+  ctx.filter = 'blur(5px)';
+  ctx.drawImage(endingBackdrop, -6, -6, canvas.width + 12, canvas.height + 12);
+  ctx.filter = 'none';
+  ctx.fillStyle = `${ending.background}30`;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.strokeStyle = ending.accent;
-  ctx.lineWidth = 3;
-  ctx.strokeRect(54, 7, 852, 306);
+  ctx.fillStyle = 'rgba(27, 35, 32, 0.34)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = ending.panel;
-  ctx.fillRect(73, 18, 814, 284);
-  ctx.strokeStyle = ending.accent;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(73, 18, 814, 284);
-  ctx.fillStyle = '#303238';
+  ctx.fillRect(panelX, panelY, panelWidth, panelHeight);
+  ctx.strokeStyle = '#343a35';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(184, 48);
+  ctx.lineTo(168, 32);
+  ctx.moveTo(168, 32);
+  ctx.lineTo(178, 32);
+  ctx.moveTo(168, 32);
+  ctx.lineTo(168, 42);
+  ctx.stroke();
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = 'bold 20px sans-serif';
-  ctx.fillText(ending.title, canvas.width / 2, 34, 760);
+  ctx.fillStyle = '#171a18';
+  ctx.font = 'bold 22px sans-serif';
+  ctx.fillText(ending.title, canvas.width / 2, 48, 600);
+  ctx.fillStyle = '#353a36';
   ctx.font = '12px sans-serif';
-  ctx.fillText(ending.description, canvas.width / 2, 54, 760);
+  ctx.fillText(ending.description, canvas.width / 2, 72, 600);
 
-  ctx.font = 'bold 10px sans-serif';
-  ctx.fillStyle = ending.accent;
-  ctx.fillText('이번 회차 수행 과제', canvas.width / 2, 72);
-  const currentTasks = (ending.taskIds || []).slice(0, 5);
-  const taskMap = new Map(taskCatalog.map(([id, label, color]) => [id, { label, color }]));
-  const currentPositions = [
-    [426, 82], [466, 82], [506, 82], [446, 108], [486, 108],
-  ];
-  currentPositions.forEach(([x, y], index) => {
-    const task = taskMap.get(currentTasks[index]);
-    ctx.fillStyle = task ? task.color : '#747a82';
-    ctx.fillRect(x, y, 30, 25);
-    ctx.strokeStyle = ending.accent;
-    ctx.strokeRect(x, y, 30, 25);
-    if (task) {
-      ctx.fillStyle = '#25282d';
-      ctx.font = 'bold 7px sans-serif';
-      ctx.fillText(task.label.slice(0, 5), x + 15, y + 13, 27);
+  if (endingUI.view === 'summary') {
+    ctx.fillStyle = '#262a27';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillText('이번 회차 과제', canvas.width / 2, 108);
+    const currentTaskMap = new Map([...taskCatalog, ...hiddenTaskCatalog].map(([id, title]) => [id, title]));
+    const currentTaskColors = new Map([...taskCatalog, ...hiddenTaskCatalog].map(([id, title, color]) => [id, color]));
+    const currentTasks = (ending.taskIds || []).filter(id => currentTaskMap.has(id)).slice(0, 5);
+    const iconSize = 58;
+    currentTasks.forEach((id, index) => {
+      const centerX = canvas.width / 2 + (index - (currentTasks.length - 1) / 2) * 82;
+      const iconY = 124;
+      ctx.fillStyle = currentTaskColors.get(id);
+      ctx.fillRect(centerX - iconSize / 2, iconY, iconSize, iconSize);
+      drawTaskIllustration(ctx, id, centerX, iconY + iconSize / 2, '#ffffff');
+      ctx.fillStyle = '#171a18';
+      ctx.font = 'bold 9px sans-serif';
+      ctx.fillText(currentTaskMap.get(id), centerX, 193, 80);
+    });
+    if (!currentTasks.length) {
+      ctx.fillStyle = '#414642';
+      ctx.font = '11px sans-serif';
+      ctx.fillText('이번 회차 완료 과제가 없습니다', canvas.width / 2, 150);
     }
-  });
 
-  ctx.fillStyle = ending.accent;
-  ctx.font = 'bold 10px sans-serif';
-  ctx.fillText('누적 과제 도감 · 완료한 과제만 해금', canvas.width / 2, 143);
-  const tileSize = 24;
-  const tileGap = 3;
-  const gridWidth = tileSize * 5 + tileGap * 4;
-  const gridLeft = (canvas.width - gridWidth) / 2;
-  taskCatalog.forEach(([id, label, color], index) => {
-    const row = Math.floor(index / 5);
-    const column = index % 5;
-    const lastRowCount = taskCatalog.length - 25;
-    const x = row === 5
-      ? canvas.width / 2 - (lastRowCount * tileSize + (lastRowCount - 1) * tileGap) / 2 + column * (tileSize + tileGap)
-      : gridLeft + column * (tileSize + tileGap);
-    const y = 150 + row * (tileSize + 2);
-    const unlocked = gameFlow.unlockedTaskIds.has(id);
-    ctx.fillStyle = unlocked ? color : '#777d84';
-    ctx.fillRect(x, y, tileSize, tileSize);
-    ctx.strokeStyle = unlocked ? ending.accent : '#50555b';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(x, y, tileSize, tileSize);
-    if (unlocked) {
-      ctx.fillStyle = '#25282d';
-      ctx.font = 'bold 6px sans-serif';
-      ctx.fillText(label.slice(0, 5), x + tileSize / 2, y + tileSize / 2 + 1, tileSize - 2);
-    } else {
-      ctx.fillStyle = '#d7d9dc';
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = '#d7d9dc';
-      ctx.beginPath();
-      ctx.arc(x + tileSize / 2, y + 9, 4, Math.PI, 0);
-      ctx.stroke();
-      ctx.fillRect(x + 6, y + 9, 11, 9);
+    ctx.fillStyle = '#d2d2ce';
+    ctx.fillRect(380, 218, 200, 36);
+    ctx.fillStyle = '#202321';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillText('과제 도감 보기', 480, 236);
+  } else {
+    const viewportX = 180;
+    const viewportWidth = 600;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = ending.accent;
+    ctx.font = 'bold 10px sans-serif';
+    ctx.fillText('← 엔딩으로', 180, 90);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#343a35';
+    ctx.fillText('과제 도감', canvas.width / 2, 90);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#545b55';
+    ctx.font = '9px sans-serif';
+    ctx.fillText(`${gameFlow.unlockedTaskIds.size} / ${taskCatalog.length + hiddenTaskCatalog.length} 해금`, 780, 90);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(viewportX, endingUI.scrollTop, viewportWidth, endingUI.scrollBottom - endingUI.scrollTop);
+    ctx.clip();
+    ctx.translate(0, endingUI.scrollTop - endingUI.scrollY);
+    const iconSize = 56;
+    const columnWidth = 112;
+    const gridWidth = columnWidth * 5;
+    const gridLeft = (canvas.width - gridWidth) / 2;
+    taskCatalog.forEach(([id, title, color], index) => {
+      const row = Math.floor(index / 5);
+      const column = index % 5;
+      const centerX = gridLeft + column * columnWidth + columnWidth / 2;
+      const iconY = row * 92;
+      const unlocked = gameFlow.unlockedTaskIds.has(id);
+      ctx.fillStyle = unlocked ? color : '#b5b5b5';
+      ctx.fillRect(centerX - iconSize / 2, iconY, iconSize, iconSize);
+      if (unlocked) {
+        drawTaskIllustration(ctx, id, centerX, iconY + iconSize / 2, '#ffffff');
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = 'bold 9px sans-serif';
+        ctx.fillStyle = '#202321';
+        ctx.fillText(title, centerX, iconY + 68, columnWidth - 6);
+      } else {
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = 'bold 34px sans-serif';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('?', centerX, iconY + iconSize / 2 + 1);
+      }
+    });
+
+    const hiddenY = Math.ceil(taskCatalog.length / 5) * 92 + 16;
+    ctx.textAlign = 'left';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.fillStyle = '#737d75';
+    ctx.fillText('히든 과제', 190, hiddenY + 4);
+    hiddenTaskCatalog.forEach(([id, title, color], index) => {
+      const cardWidth = 290;
+      const cardX = 190 + index * 300;
+      const cardY = hiddenY + 18;
+      const unlocked = gameFlow.unlockedTaskIds.has(id);
+      ctx.fillStyle = '#ededeb';
+      ctx.fillRect(cardX, cardY, cardWidth, 68);
+      ctx.fillStyle = unlocked ? color : '#b5b5b5';
+      ctx.fillRect(cardX + 6, cardY + 6, 56, 56);
+      if (unlocked) {
+        drawTaskIllustration(ctx, id, cardX + 34, cardY + 34, '#ffffff');
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.fillStyle = '#202321';
+        ctx.fillText(title, cardX + 74, cardY + 34, cardWidth - 84);
+      } else {
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = 'bold 34px sans-serif';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText('?', cardX + 34, cardY + 35);
+      }
+    });
+    ctx.restore();
+
+    const maxScroll = endingScrollMax();
+    if (maxScroll > 0) {
+      const trackX = 792;
+      const trackY = endingUI.scrollTop;
+      const trackHeight = endingUI.scrollBottom - endingUI.scrollTop;
+      const thumbHeight = Math.max(22, trackHeight * trackHeight / (trackHeight + maxScroll));
+      const thumbY = trackY + (trackHeight - thumbHeight) * endingUI.scrollY / maxScroll;
+      ctx.fillStyle = 'rgba(85, 99, 88, 0.16)';
+      ctx.fillRect(trackX, trackY, 2, trackHeight);
+      ctx.fillStyle = 'rgba(85, 99, 88, 0.66)';
+      ctx.fillRect(trackX, thumbY, 2, thumbHeight);
     }
-  });
+  }
   ctx.restore();
 }
 
@@ -1646,38 +2027,38 @@ function drawRoomFurniture(ctx) {
 
   const windowDone = gameFlow.completed.has('window');
   const bedDone = gameFlow.completed.has('bed');
-  ctx.fillStyle = windowDone ? '#9dc7b0' : WINDOW_COLOR;
+  ctx.fillStyle = windowDone ? GUARD_WINDOW_COLOR : WINDOW_COLOR;
   ctx.fillRect(windowLeft, windowTop, paneWidth, paneHeight);
   ctx.fillRect(windowLeft + paneWidth + paneGap, windowTop, paneWidth, paneHeight);
 
-  ctx.fillStyle = bedDone ? '#c6a9c7' : '#d8d8d8';
+  ctx.fillStyle = bedDone ? '#ffffff' : '#d8d8d8';
   ctx.fillRect(15, GROUND_Y - 82, 275, 47);
-  ctx.fillStyle = bedDone ? '#9b789d' : '#888888';
+  ctx.fillStyle = bedDone ? '#f5d9e4' : '#888888';
   ctx.fillRect(107, GROUND_Y - 82, 183, 47);
-  ctx.fillStyle = bedDone ? '#806282' : '#555555';
+  ctx.fillStyle = bedDone ? '#e8b6c8' : '#555555';
   ctx.fillRect(0, GROUND_Y - 122, 15, 97);
   ctx.fillRect(0, GROUND_Y - 35, 290, 13);
   ctx.fillRect(20, GROUND_Y - 22, 15, 22);
   ctx.fillRect(255, GROUND_Y - 22, 15, 22);
 
-  ctx.fillStyle = gameFlow.completed.has('cactus') ? '#789d7b' : '#555555';
+  ctx.fillStyle = gameFlow.completed.has('cactus') ? '#f6e8aa' : '#555555';
   ctx.fillRect(719, GROUND_Y - 112, 241, 18);
   ctx.fillRect(719, GROUND_Y - 94, 11, 94);
   ctx.fillRect(949, GROUND_Y - 94, 11, 94);
 
-  ctx.fillStyle = '#888888';
+  ctx.fillStyle = gameFlow.completed.has('cactus') ? '#96a4c4' : '#888888';
   ctx.fillRect(850, GROUND_Y - 194, 80, 66);
-  ctx.fillStyle = '#333333';
+  ctx.fillStyle = gameFlow.completed.has('cactus') ? '#969696' : '#333333';
   ctx.fillRect(856, GROUND_Y - 188, 68, 54);
-  ctx.fillStyle = '#888888';
+  ctx.fillStyle = gameFlow.completed.has('cactus') ? '#96a4c4' : '#888888';
   ctx.fillRect(883, GROUND_Y - 134, 14, 20);
   ctx.fillRect(869, GROUND_Y - 114, 42, 4);
 
-  ctx.fillStyle = gameFlow.completed.has('cactus') ? '#67966a' : '#555555';
+  ctx.fillStyle = gameFlow.completed.has('cactus') ? '#a0d98f' : '#555555';
   traceCactus(ctx);
   ctx.fill();
 
-  ctx.fillStyle = gameFlow.completed.has('cactus') ? '#d99aa9' : '#7d7d7d';
+  ctx.fillStyle = gameFlow.completed.has('cactus') ? '#f7c7d8' : '#7d7d7d';
   ctx.beginPath();
   ctx.moveTo(742, GROUND_Y - 144);
   ctx.lineTo(784, GROUND_Y - 144);
@@ -1698,11 +2079,12 @@ function drawOutdoorBackground(ctx, scene) {
     ctx.fillRect(0, 0, 960, 320);
 
     // A narrow apartment block sits beneath a canopy along the top edge.
-    ctx.fillStyle = gameFlow.completed.has('stone') ? '#91a5a0' : wall;
+    ctx.fillStyle = gameFlow.completed.has('stone') ? '#93b181' : wall;
     ctx.fillRect(0, 28, 75, 292);
-    ctx.fillStyle = gameFlow.completed.has('stone') ? '#71847f' : mid;
+    const canopyColor = gameFlow.completed.has('stone') ? '#91a765' : mid;
+    ctx.fillStyle = canopyColor;
     ctx.fillRect(0, 0, 155, 32);
-    ctx.fillStyle = mid;
+    ctx.fillStyle = canopyColor;
     ctx.fillRect(0, 30, 155, 4);
 
     // The planter stays monochrome until its flower task is complete.
@@ -1749,7 +2131,7 @@ function drawOutdoorBackground(ctx, scene) {
     ctx.textAlign = 'center';
     ctx.fillText('경비실', 852, 62);
     ctx.restore();
-    ctx.fillStyle = guardDone ? '#a9cad0' : WINDOW_COLOR;
+    ctx.fillStyle = guardDone ? GUARD_WINDOW_COLOR : WINDOW_COLOR;
     ctx.fillRect(764, 88, 176, 138 * 0.7);
     return;
   }
@@ -1762,13 +2144,13 @@ function drawOutdoorBackground(ctx, scene) {
     const catPet = gameFlow.completed.has('cat_pet');
     ctx.save();
     ctx.translate(-20 - BUS_STOP_LEFT_SHIFT, 0);
-    ctx.fillStyle = busStopDone ? '#9eb6a1' : '#999999';
+    ctx.fillStyle = busStopDone ? '#f6e8aa' : '#999999';
     ctx.fillRect(530, 80, 410, 240);
     ctx.fillStyle = busStopDone ? '#829f87' : '#858585';
     ctx.fillRect(530, 80, 410, 34);
     ctx.fillRect(530, 114, 34 / 3, 206);
     ctx.fillRect(940 - 34 / 3, 114, 34 / 3, 206);
-    ctx.fillStyle = busStopDone ? '#8fae96' : mid;
+    ctx.fillStyle = busStopDone ? '#d8be96' : mid;
     ctx.fillRect(605, 255, 260, 10);
     ctx.fillRect(605, 265, 10, 55);
     ctx.fillRect(855, 265, 10, 55);
@@ -1791,28 +2173,27 @@ function drawOutdoorBackground(ctx, scene) {
     ctx.restore();
     ctx.restore();
 
-    ctx.fillStyle = treeDone ? '#729b70' : '#666666';
-    ctx.fillRect(193, 176, 24, 144);
-    ctx.fillRect(185, 218, 40, 14);
-    ctx.fillStyle = treeDone ? '#93bd8c' : '#858585';
-    ctx.fillRect(156, 35, 100, 92);
-    ctx.fillRect(137, 82, 138, 82);
-    ctx.fillRect(163, 128, 88, 78);
+    ctx.fillStyle = treeDone ? '#806c50' : '#666666';
+    ctx.fillRect(125.5, 176, 24, 144);
+    ctx.fillStyle = treeDone ? '#a0d98f' : '#858585';
+    ctx.fillRect(68.5, 50, 138, 138);
 
     const catHeadDrop = gameFlow.mode === 'dialogue' && gameFlow.activityMotion === 'cat'
       ? Math.round((1 + Math.sin(performance.now() / 160)) * 2)
       : 0;
-    ctx.fillStyle = catPet ? '#d99b69' : '#484848';
-    ctx.fillRect(370, 286, 49, 25);
-    ctx.fillRect(408, 295, 15, 13);
-    ctx.fillRect(362, 310, 8, 10);
-    ctx.fillRect(376, 310, 8, 10);
-    ctx.fillRect(404, 308, 8, 12);
-    ctx.fillRect(370, 281 + catHeadDrop, 24, 20 - catHeadDrop);
-    ctx.fillRect(371, 276 + catHeadDrop, 7, 9);
-    ctx.fillRect(386, 276 + catHeadDrop, 7, 9);
+    ctx.fillStyle = catPet ? '#efc99d' : '#484848';
+    ctx.fillRect(366, 286, 44, 18);
+    ctx.fillRect(360, 282, 5, 10);
+    ctx.fillRect(360, 278, 12, 5);
+    ctx.fillRect(402, 278 + catHeadDrop, 21, 20 - catHeadDrop);
+    ctx.fillRect(405, 272 + catHeadDrop, 6, 9);
+    ctx.fillRect(415, 272 + catHeadDrop, 6, 9);
+    ctx.fillRect(372, 300, 6, 20);
+    ctx.fillRect(384, 300, 6, 20);
+    ctx.fillRect(400, 300, 6, 20);
+    ctx.fillRect(412, 300, 6, 20);
     ctx.fillStyle = '#b0b0b0';
-    ctx.fillRect(378, 287 + catHeadDrop, 3, 2);
+    ctx.fillRect(416, 286 + catHeadDrop, 3, 2);
     return;
   }
 
@@ -1919,17 +2300,7 @@ function drawOutdoorBackground(ctx, scene) {
     }
     const seatedClassmates = [[60, 1], [240.75, 1], [719.25, -1]];
     for (const [deskX, facing] of seatedClassmates) {
-      ctx.save();
-      ctx.translate(deskX + 90.375, 260);
-      ctx.scale(facing * 3.8, 3.8);
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(-2.5, -33, 8.5, 11);
-      ctx.fillRect(-2.5, -22, 4, 22);
-      ctx.fillRect(0, -19, 3.3, 16);
-      ctx.fillRect(-2.5, -3, 11, 4);
-      ctx.fillRect(5, 0, 4, (GROUND_Y - 260) / 3.8);
-      ctx.fillRect(5, (GROUND_Y - 260) / 3.8 - 2.5, 7, 2.5);
-      ctx.restore();
+      drawSeatedCharacter(ctx, deskX + 90.375, 260, facing);
     }
     return;
   }
@@ -1943,106 +2314,71 @@ function drawOutdoorBackground(ctx, scene) {
     const pochaDone = gameFlow.completed.has('pocha_snack');
 
     ctx.fillStyle = stationeryDone ? '#9ebca4' : wall;
-    ctx.fillRect(20, 58, 230, 262);
-    ctx.fillStyle = stationeryDone ? '#78987f' : dark;
-    ctx.fillRect(20, 44, 230, 28);
-    for (let awningX = 28; awningX < 250; awningX += 28) {
-      ctx.fillStyle = awningX % 2 ? '#c7a6a4' : '#dedede';
-      ctx.fillRect(awningX, 44, 14, 28);
-    }
-    ctx.fillStyle = '#dedede';
+    ctx.fillRect(20, 76, 230, 244);
+    ctx.fillStyle = stationeryDone ? '#78987f' : mid;
+    ctx.fillRect(50, 84, 170, 32);
+    ctx.fillStyle = light;
     ctx.font = 'bold 15px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('문방구', 135, 95);
-    ctx.fillStyle = stationeryDone ? '#c8d8ca' : '#b8b8b8';
-    ctx.fillRect(38, 112, 118, 110);
-    ctx.fillStyle = dark;
-    ctx.fillRect(44, 118, 106, 98);
-    ctx.fillStyle = '#d8d1b3';
-    ctx.fillRect(50, 124, 94, 86);
-    ctx.fillStyle = '#777777';
-    ctx.fillRect(50, 210, 94, 6);
+    ctx.textBaseline = 'middle';
+    ctx.fillText('문방구', 135, 100);
+    ctx.fillStyle = getWindowColor(stationeryDone ? GUARD_WINDOW_COLOR : WINDOW_COLOR);
+    ctx.fillRect(50, 124, 170, 98);
     ctx.fillStyle = '#c9c9c9';
-    ctx.fillRect(168, 188, 64, 112);
+    ctx.fillRect(168, 208, 64, 112);
     ctx.fillStyle = '#3d4549';
-    ctx.fillRect(174, 194, 52, 56);
+    ctx.fillRect(174, 216, 52, 48);
     ctx.fillStyle = '#a9bd9e';
-    ctx.fillRect(178, 198, 44, 29);
+    ctx.fillRect(178, 220, 44, 29);
     ctx.fillStyle = '#dedede';
-    ctx.fillRect(184, 258, 28, 6);
-    ctx.beginPath();
-    ctx.arc(61, 260, 22, 0, Math.PI * 2);
-    ctx.strokeStyle = stationeryDone ? '#70a18a' : '#777777';
-    ctx.lineWidth = 5;
-    ctx.stroke();
-    ctx.fillStyle = '#b8a2c4';
-    ctx.beginPath();
-    ctx.arc(112, 267, 13, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillRect(102, 280, 20, 4);
+    ctx.fillRect(184, 292, 28, 6);
 
     ctx.fillStyle = bookstoreDone ? '#9ebca4' : wall;
     ctx.fillRect(270, 48, 225, 272);
-    ctx.fillStyle = bookstoreDone ? '#78987f' : dark;
-    ctx.fillRect(270, 48, 225, 34);
-    ctx.fillStyle = '#dedede';
-    ctx.font = 'bold 15px sans-serif';
-    ctx.fillText('서점', 382, 70);
-    ctx.fillStyle = '#484848';
-    ctx.fillRect(292, 94, 181, 210);
-    ctx.fillStyle = bookstoreDone ? '#c5d8ca' : '#b8b8b8';
-    ctx.fillRect(300, 102, 165, 194);
-    ctx.fillStyle = dark;
-    ctx.font = 'bold 13px sans-serif';
-    ctx.fillText('오늘은 천천히 가도 괜찮아', 382, 158);
-    ctx.fillRect(322, 190, 122, 4);
-    ctx.fillRect(334, 202, 98, 3);
+    ctx.fillStyle = bookstoreDone ? '#78987f' : mid;
+    ctx.fillRect(297, 56, 171, 34);
+    ctx.fillStyle = light;
+    ctx.fillText('서점', 382, 73);
+    ctx.fillStyle = getWindowColor(bookstoreDone ? GUARD_WINDOW_COLOR : WINDOW_COLOR);
+    ctx.fillRect(300, 98, 165, 198);
 
     ctx.fillStyle = pianoDone ? '#9ebca4' : wall;
     ctx.fillRect(515, 68, 215, 252);
-    ctx.fillStyle = pianoDone ? '#78987f' : dark;
-    ctx.fillRect(515, 68, 215, 34);
-    ctx.fillStyle = '#dedede';
-    ctx.font = 'bold 14px sans-serif';
-    ctx.fillText('피아노 학원', 622, 90);
-    ctx.fillStyle = '#333333';
-    ctx.fillRect(544, 126, 158, 194);
-    ctx.fillStyle = '#8b8b8b';
-    ctx.fillRect(548, 130, 150, 190);
-    ctx.fillStyle = '#484848';
-    ctx.fillRect(562, 144, 105, 176);
-    ctx.fillStyle = '#d0d0d0';
-    ctx.fillRect(562, 264, 105, 8);
-    ctx.fillStyle = '#666666';
-    for (let keyX = 566; keyX < 666; keyX += 12) ctx.fillRect(keyX, 266, 2, 6);
-    ctx.fillStyle = pianoDone ? '#abc9b1' : '#9a9a9a';
-    ctx.beginPath();
-    ctx.moveTo(668, 136);
-    ctx.lineTo(711, 150);
-    ctx.lineTo(711, 306);
-    ctx.lineTo(668, 320);
-    ctx.closePath();
-    ctx.fill();
+    ctx.fillStyle = pianoDone ? '#78987f' : mid;
+    ctx.fillRect(537, 76, 171, 34);
+    ctx.fillStyle = light;
+    ctx.fillText('피아노 학원', 622, 93);
+    ctx.fillStyle = getWindowColor(pianoDone ? GUARD_WINDOW_COLOR : WINDOW_COLOR);
+    ctx.fillRect(540, 118, 165, 178);
 
-    ctx.fillStyle = pochaDone ? '#b9a184' : '#858585';
-    ctx.fillRect(750, 88, 190, 232);
+    ctx.fillStyle = pochaDone ? '#967e61' : mid;
+    ctx.fillRect(775, 85, 140, 32);
+    ctx.fillStyle = light;
+    ctx.fillText('포장마차', 845, 101);
     ctx.fillStyle = pochaDone ? '#967e61' : dark;
-    ctx.fillRect(750, 88, 190, 36);
-    ctx.fillStyle = '#d5b9a0';
-    for (let canopyX = 758; canopyX < 940; canopyX += 30) {
-      ctx.fillRect(canopyX, 124, 15, 14);
+    ctx.fillRect(754, 123, 182, 18);
+    ctx.fillStyle = pochaDone ? '#d9c29d' : '#d5b9a0';
+    ctx.fillRect(754, 141, 182, 10);
+    ctx.fillStyle = pochaDone ? '#b9a184' : '#858585';
+    ctx.fillRect(772, 151, 8, 79);
+    ctx.fillRect(910, 151, 8, 79);
+    ctx.fillStyle = getWindowColor(pochaDone ? GUARD_WINDOW_COLOR : WINDOW_COLOR);
+    ctx.fillRect(780, 157, 130, 61);
+    ctx.fillStyle = pochaDone ? '#967e61' : dark;
+    ctx.fillRect(758, 218, 178, 12);
+    ctx.fillStyle = pochaDone ? '#b9a184' : '#858585';
+    ctx.fillRect(778, 230, 140, 61);
+    ctx.fillStyle = pochaDone ? '#967e61' : dark;
+    for (const wheelX of [808, 888]) {
+      ctx.beginPath();
+      ctx.arc(wheelX, 305, 15, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = pochaDone ? '#d9c29d' : '#b9a98e';
+      ctx.beginPath();
+      ctx.arc(wheelX, 305, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = pochaDone ? '#967e61' : dark;
     }
-    ctx.fillStyle = '#dedede';
-    ctx.font = 'bold 15px sans-serif';
-    ctx.fillText('포장마차', 845, 112);
-    ctx.fillStyle = '#49443d';
-    ctx.fillRect(770, 166, 150, 100);
-    ctx.fillStyle = pochaDone ? '#d9c29d' : '#b9a98e';
-    ctx.fillRect(780, 174, 130, 82);
-    ctx.fillStyle = '#777777';
-    ctx.fillRect(764, 267, 162, 12);
-    ctx.fillRect(778, 279, 9, 41);
-    ctx.fillRect(901, 279, 9, 41);
     return;
   }
 
@@ -2054,7 +2390,7 @@ function drawOutdoorForeground(ctx, scene) {
   if (busVisible) {
     ctx.fillStyle = '#777777';
     ctx.fillRect(busArrival.x, 48, BUS_WIDTH, 272);
-    ctx.fillStyle = '#dedede';
+    ctx.fillStyle = WINDOW_COLOR;
     for (let windowIndex = 0; windowIndex < 4; windowIndex++) {
       ctx.fillRect(busArrival.x + 46 + windowIndex * 153, 85, 124, 70);
     }
@@ -2073,6 +2409,108 @@ function drawOutdoorForeground(ctx, scene) {
   }
 }
 
+function drawPlayerSittingCharacter(ctx, x, seatY, facing, seatId, activityMotion, hasRabbitPlush) {
+  const scale = 3.8;
+  const torsoLength = seatId === 'bus_stop_bench' ? 15 : 22;
+  ctx.save();
+  ctx.translate(x, seatY);
+  ctx.scale(facing * scale, scale);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(-2.5, -torsoLength - 11, 8.5, 11);
+  ctx.fillRect(-2.5, -torsoLength, 4, torsoLength);
+  if (activityMotion === 'cat') {
+    const strokeOffset = Math.sin(performance.now() / 120) * 1.5;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 3.3;
+    ctx.beginPath();
+    ctx.moveTo(1, -torsoLength + 3);
+    ctx.lineTo(13, -10);
+    ctx.lineTo(25 + strokeOffset, -7);
+    ctx.stroke();
+  } else if (hasRabbitPlush) {
+    ctx.fillStyle = '#f2a6c4';
+    ctx.fillRect(1.75, -torsoLength + 4 + RABBIT_PLUSH_DROP, 1.5, 2.5);
+    ctx.fillRect(1.5, -torsoLength + 1 + RABBIT_PLUSH_DROP, 1, 2);
+    ctx.fillRect(3.5, -torsoLength + 1 + RABBIT_PLUSH_DROP, 1, 2);
+    ctx.fillStyle = '#ffffff';
+  } else if (activityMotion === 'cereal') {
+    const spoonProgress = (1 + Math.cos(performance.now() / 240)) / 2;
+    const handX = 7 + 14 * spoonProgress;
+    const handY = -26 + 12 * spoonProgress;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 3.3;
+    ctx.beginPath();
+    ctx.moveTo(1, -19);
+    ctx.lineTo(8, -14);
+    ctx.lineTo(handX, handY);
+    ctx.stroke();
+    ctx.strokeStyle = '#777777';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    ctx.moveTo(handX, handY);
+    ctx.lineTo(handX + 3, handY + 1);
+    ctx.stroke();
+    ctx.fillStyle = '#777777';
+    ctx.fillRect(handX + 2.5, handY, 2, 2);
+    ctx.fillStyle = '#ffffff';
+  } else {
+    ctx.fillRect(0, -torsoLength + 3, 3.3, torsoLength - 6);
+  }
+  ctx.fillRect(-2.5, -3, 11, 4);
+  ctx.fillRect(5, 0, 4, (GROUND_Y - seatY) / scale);
+  ctx.fillRect(5, (GROUND_Y - seatY) / scale - 2.5, 7, 2.5);
+  ctx.restore();
+}
+
+function drawPlayerStandingCharacter(ctx, x, y, facing, bob, hasRabbitPlush, verticalScale = 3.8) {
+  const scale = 3.8;
+  const drawLimb = (limbX, limbY, length, width, angle, withFoot = false) => {
+    ctx.save();
+    ctx.translate(limbX, limbY + bob);
+    ctx.rotate(angle);
+    ctx.fillRect(-width / 2, 0, width, length);
+    if (withFoot) ctx.fillRect(-width / 2, length - 1, width + 3, 2.5);
+    ctx.restore();
+  };
+
+  ctx.save();
+  ctx.translate(x, y - verticalScale * (1.5 + bob));
+  ctx.scale(facing * scale, verticalScale);
+  ctx.fillStyle = '#ffffff';
+  drawLimb(-0.5, -14, 15, 4, 0, true);
+  drawLimb(-2.5, -35, 18, 3.3, 0);
+  ctx.fillRect(-2.5, -39 + bob, 4, 25);
+  if (hasRabbitPlush) {
+    ctx.fillStyle = '#f2a6c4';
+    ctx.fillRect(1.75, -36 + bob + RABBIT_PLUSH_DROP, 1.5, 2.5);
+    ctx.fillRect(1.5, -38 + bob + RABBIT_PLUSH_DROP, 1, 2);
+    ctx.fillRect(3.5, -38 + bob + RABBIT_PLUSH_DROP, 1, 2);
+    ctx.fillStyle = '#ffffff';
+  }
+  ctx.fillRect(-2.5, -50 + bob, 8.5, 11);
+  drawLimb(1, -35, 18, 3.3, 0);
+  drawLimb(-0.5, -14, 15, 4, 0, true);
+  ctx.restore();
+}
+
+function drawSeatedCharacter(ctx, x, y, facing) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(facing * 3.8, 3.8);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(-2.5, -33, 8.5, 11);
+  ctx.fillRect(-2.5, -22, 4, 22);
+  ctx.fillRect(0, -19, 3.3, 16);
+  ctx.fillRect(-2.5, -3, 11, 4);
+  ctx.fillRect(5, 0, 4, (GROUND_Y - y) / 3.8);
+  ctx.fillRect(5, (GROUND_Y - y) / 3.8 - 2.5, 7, 2.5);
+  ctx.restore();
+}
+
+function drawGrandmaStanding(ctx, x, y) {
+  drawPlayerStandingCharacter(ctx, x, y, -1, 0, false);
+}
+
 function drawSceneBackground(ctx, scene) {
   ctx.fillStyle = '#b5b5b5';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -2083,79 +2521,43 @@ function drawSceneBackground(ctx, scene) {
     ctx.fillStyle = '#969696';
     ctx.fillRect(0, 0, 960, 320);
     const busWindowDone = gameFlow.completed.has('bus_window');
-    ctx.fillStyle = busWindowDone ? '#a8c9bc' : '#dedede';
+    const sceneryColors = ['#a8c9bc', '#efc98b', '#c5b3d8', '#e7a59a', '#91b8d1'];
     for (let windowIndex = 0; windowIndex < 4; windowIndex++) {
       const windowX = 36 + windowIndex * 180;
       ctx.save();
       ctx.beginPath();
       ctx.rect(windowX, 62, 150, 100);
       ctx.clip();
-      ctx.fillStyle = busWindowDone && windowIndex === 3 ? '#a8c9bc' : '#dedede';
+      ctx.fillStyle = getWindowColor(busWindowDone ? GUARD_WINDOW_COLOR : WINDOW_COLOR);
       ctx.fillRect(windowX, 62, 150, 100);
-      ctx.fillStyle = '#b7b7b7';
       for (let buildingIndex = -1; buildingIndex < 15; buildingIndex++) {
         const buildingX = buildingIndex * 120 - busJourney.sceneryOffset;
-        ctx.fillRect(buildingX, 112 - (buildingIndex % 3 + 1) * 10, 70, 70);
+        ctx.fillStyle = busWindowDone
+          ? sceneryColors[(buildingIndex + sceneryColors.length) % sceneryColors.length]
+          : '#b7b7b7';
+        ctx.fillRect(buildingX, 112 - (buildingIndex % 3 + 1) * 10, 70, 82);
       }
-      ctx.fillStyle = '#a4a4a4';
-      ctx.fillRect(windowX, 150, 150, 12);
       ctx.restore();
     }
     const grandmaSeatComplete = gameFlow.completed.has('grandma_seat');
-    const seatXs = [56, 326, 596];
+    const seatXs = [56, 236, 416];
     seatXs.forEach((seatX, seatIndex) => {
-      ctx.fillStyle = grandmaSeatComplete ? ['#8aa9a0', '#b69ba8', '#d2b1bd'][seatIndex] : '#555555';
+      ctx.fillStyle = grandmaSeatComplete ? '#8aa9a0' : '#555555';
       ctx.fillRect(seatX, 177, 8, 71);
       ctx.fillRect(seatX, 248, 50, 16);
       ctx.fillRect(seatX, 264, 8, 56);
     });
-    for (const [seatX, shirtColor, hairColor] of [[81, '#8eb8c7', '#6b625b'], [351, '#b8a0c9', '#534c48']]) {
-      ctx.save();
-      ctx.translate(seatX, 248);
-      ctx.scale(-3.8, 3.8);
-      ctx.fillStyle = shirtColor;
-      ctx.fillRect(-2.5, -31, 5, 20);
-      ctx.fillStyle = '#e5c4a4';
-      ctx.fillRect(-2.5, -39, 8, 9);
-      ctx.fillStyle = hairColor;
-      ctx.fillRect(-3, -41, 9, 3);
-      ctx.fillStyle = '#555555';
-      ctx.fillRect(-2, -11, 3, 11);
-      ctx.fillRect(2, -11, 3, 11);
-      ctx.restore();
-    }
+    for (const seatX of seatXs.slice(1)) drawSeatedCharacter(ctx, seatX + 25, 248, 1);
 
-    if (['approach', 'talking'].includes(gameFlow.grandmaState)) {
+    if (gameFlow.grandmaState === 'entering') {
       const elapsed = performance.now() - gameFlow.grandmaStartedAt;
-      const progress = Math.min(elapsed / 900, 1);
-      const grandmaX = 850 + (560 - 850) * progress;
-      ctx.save();
-      ctx.translate(grandmaX, GROUND_Y);
-      ctx.fillStyle = '#796d91';
-      ctx.fillRect(-8, -31, 16, 25);
-      ctx.fillRect(-7, -6, 5, 6);
-      ctx.fillRect(2, -6, 5, 6);
-      ctx.fillStyle = '#e5c5a5';
-      ctx.fillRect(-7, -43, 14, 12);
-      ctx.fillStyle = '#b7b7b7';
-      ctx.fillRect(-8, -47, 16, 6);
-      ctx.fillRect(-10, -43, 4, 5);
-      ctx.fillRect(6, -43, 4, 5);
-      ctx.restore();
-    } else if (gameFlow.grandmaState === 'gifted') {
-      ctx.save();
-      ctx.translate(621, 248);
-      ctx.scale(-3.8, 3.8);
-      ctx.fillStyle = '#8d7c9a';
-      ctx.fillRect(-2.5, -30, 5, 19);
-      ctx.fillStyle = '#e4c4a4';
-      ctx.fillRect(-2.5, -39, 8, 9);
-      ctx.fillStyle = '#b6b6b6';
-      ctx.fillRect(-3, -41, 9, 3);
-      ctx.fillStyle = '#555555';
-      ctx.fillRect(-2, -11, 3, 11);
-      ctx.fillRect(2, -11, 3, 11);
-      ctx.restore();
+      const progress = Math.min(elapsed / 3600, 1);
+      const grandmaX = 850 + (200 - 850) * progress;
+      drawGrandmaStanding(ctx, grandmaX, GROUND_Y);
+    } else if (gameFlow.grandmaState === 'approach') {
+      drawGrandmaStanding(ctx, 200, GROUND_Y);
+    } else if (['seatedTalking', 'gifted'].includes(gameFlow.grandmaState)) {
+      drawPlayerSittingCharacter(ctx, 81, 248, 1, 'bus_seat_left', null, false);
     }
     ctx.fillStyle = '#bdbdbd';
     ctx.fillRect(758, 58, 86, 262);
@@ -2165,17 +2567,19 @@ function drawSceneBackground(ctx, scene) {
   } else if (scene.id === 'home') {
     drawRoomFurniture(ctx);
   } else if (scene.id === 'living_room') {
-    ctx.fillStyle = gameFlow.fridgeEver ? '#a9c6d6' : '#dedede';
+    ctx.fillStyle = gameFlow.fridgeEver ? '#efc99d' : '#dedede';
     ctx.fillRect(0, 70, 111, 250);
     const dishesDone = gameFlow.completed.has('dishes');
     const cerealDone = gameFlow.completed.has('cereal');
-    ctx.fillStyle = dishesDone ? '#9aaf99' : '#777777';
+    const sinkBodyColor = dishesDone ? '#9aacc8' : '#777777';
+    ctx.fillStyle = sinkBodyColor;
     ctx.fillRect(111, 70, 286, 66);
     ctx.fillRect(111, 202, 286, 118);
-    ctx.fillStyle = dishesDone ? '#e4dfc9' : '#d8d8d8';
+    ctx.fillStyle = dishesDone ? '#ffffff' : '#d8d8d8';
     ctx.fillRect(111, 190, 286, 12);
-    ctx.fillStyle = dishesDone ? '#a6bdc2' : '#999999';
+    ctx.fillStyle = sinkBodyColor;
     ctx.fillRect(133, 187, 99, 5);
+    ctx.fillStyle = sinkBodyColor;
     ctx.fillRect(180, 165, 5, 22);
     ctx.fillRect(180, 165, 21, 5);
     ctx.fillRect(196, 165, 5, 10);
@@ -2185,18 +2589,9 @@ function drawSceneBackground(ctx, scene) {
       ctx.fillRect(197, 175, 3, 12);
       ctx.fillRect(191, 183 + Math.round(Math.sin(performance.now() / 100) * 2), 4, 3);
     }
-    ctx.fillStyle = '#d2d2d2';
-    ctx.fillRect(0, 174, 111, 5 / 3);
-    ctx.fillStyle = '#b0b0b0';
+    ctx.fillStyle = gameFlow.fridgeEver ? '#d78945' : '#b0b0b0';
     ctx.fillRect(92, 130.7275, 5, 31.36);
     ctx.fillRect(92, 196.9025, 5, 47.04);
-    ctx.fillStyle = '#6d6d6d';
-    ctx.fillRect(111 + 286 / 3 - 5 / 6, 70, 5 / 3, 66);
-    ctx.fillRect(111 + 286 * 2 / 3 - 5 / 6, 70, 5 / 3, 66);
-    ctx.fillRect(111 + 286 / 4 - 5 / 6, 202, 5 / 3, 118);
-    ctx.fillRect(111 + 286 / 2 - 5 / 6, 202, 5 / 3, 118);
-    ctx.fillRect(254, 202 + 118 / 3 - 5 / 6, 143, 5 / 3);
-    ctx.fillRect(254, 202 + 118 * 2 / 3 - 5 / 6, 143, 5 / 3);
     ctx.fillStyle = '#c9c9c9';
     ctx.fillRect(144.7, 128.5, 26.6, 2.5);
     ctx.fillRect(240.7, 128.5, 26.6, 2.5);
@@ -2206,11 +2601,11 @@ function drawSceneBackground(ctx, scene) {
     ctx.fillRect(308.2, 214, 33.6, 2.5);
     ctx.fillRect(308.2, 253, 33.6, 2.5);
     ctx.fillRect(308.2, 292, 33.6, 2.5);
-    ctx.fillStyle = cerealDone ? '#c8b9d8' : '#dedede';
+    ctx.fillStyle = cerealDone ? '#f6e8aa' : '#dedede';
     ctx.fillRect(610, GROUND_Y - 112, 241, 18);
     ctx.fillRect(610, GROUND_Y - 94, 11, 94);
     ctx.fillRect(840, GROUND_Y - 94, 11, 94);
-    ctx.fillStyle = cerealDone ? '#c8b9d8' : '#dedede';
+    ctx.fillStyle = cerealDone ? '#f6e8aa' : '#dedede';
     ctx.fillRect(548, 177, 8, 79);
     ctx.fillRect(548, 248, 50, 8);
     ctx.fillRect(548, 256, 8, 64);
@@ -2219,15 +2614,15 @@ function drawSceneBackground(ctx, scene) {
     ctx.fillRect(863, 248, 50, 8);
     ctx.fillRect(863, 256, 8, 64);
     ctx.fillRect(905, 256, 8, 64);
-    ctx.fillStyle = '#999999';
+    ctx.fillStyle = cerealDone ? '#f2c9d8' : '#999999';
     ctx.fillRect(712, 148, 42, 60);
-    ctx.fillStyle = '#dedede';
+    ctx.fillStyle = '#dddddd';
     ctx.save();
     ctx.font = 'bold 12px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('씨리얼', 733, 182);
     ctx.restore();
-    ctx.fillStyle = cerealDone ? '#7cae8a' : '#777777';
+    ctx.fillStyle = cerealDone ? '#c5e8a9' : '#777777';
     ctx.beginPath();
     ctx.moveTo(642, GROUND_Y - 128);
     ctx.lineTo(684, GROUND_Y - 128);
@@ -2235,6 +2630,15 @@ function drawSceneBackground(ctx, scene) {
     ctx.lineTo(648, GROUND_Y - 112);
     ctx.closePath();
     ctx.fill();
+    ctx.fillStyle = gameFlow.fridgeEver ? '#d78945' : '#b0b0b0';
+    ctx.fillRect(0, 174, 111, 2);
+    ctx.fillStyle = dishesDone ? '#657792' : '#6d6d6d';
+    ctx.fillRect(205, 70, 2, 66);
+    ctx.fillRect(301, 70, 2, 66);
+    ctx.fillRect(182, 202, 2, 118);
+    ctx.fillRect(253, 202, 2, 118);
+    ctx.fillRect(254, 241, 143, 2);
+    ctx.fillRect(254, 280, 143, 2);
   } else if (scene.id === 'elevator') {
     ctx.fillStyle = '#777777';
     ctx.font = '900 30px sans-serif';
@@ -2271,7 +2675,7 @@ function drawSceneBackground(ctx, scene) {
     }
     const doorWidth = 120 * (1 - openProgress);
     const elevatorDoorDone = gameFlow.completed.has('stone');
-    ctx.fillStyle = elevatorDoorDone ? '#9bb8a4' : '#999999';
+    ctx.fillStyle = elevatorDoorDone ? '#d8be96' : '#999999';
     if (doorWidth > 0) {
       ctx.fillRect(358, 84, doorWidth, 236);
       ctx.fillRect(602 - doorWidth, 84, doorWidth, 236);
@@ -2280,11 +2684,12 @@ function drawSceneBackground(ctx, scene) {
     ctx.fillRect(310, 191, 18, 18);
     ctx.fillStyle = rideElapsed >= 0 && scene.id === 'elevator' ? '#484848' : '#777777';
     ctx.fillRect(310, 213, 18, 18);
-    ctx.fillStyle = gameFlow.completed.has('stairs_door') ? '#9bb8a4' : '#999999';
+    const stairsDone = gameFlow.completed.has('stairs_door');
+    ctx.fillStyle = stairsDone ? '#e2b8d5' : '#999999';
     ctx.fillRect(779, 84, 120, 236);
-    ctx.fillStyle = '#777777';
+    ctx.fillStyle = stairsDone ? '#ba8cab' : '#777777';
     ctx.fillRect(876, 216, 8, 8);
-    ctx.fillStyle = '#858585';
+    ctx.fillStyle = stairsDone ? '#ba8cab' : '#858585';
     ctx.fillRect(791, 106, 96, 32);
     ctx.save();
     ctx.fillStyle = '#dddddd';
@@ -2301,20 +2706,32 @@ function drawSceneBackground(ctx, scene) {
     }
   } else if (scene.id === 'apartment_hallway') {
     const neighborVisited = gameFlow.completed.has('apartment_door_887');
+    const guardVisited = gameFlow.completed.has('guard');
     for (const [doorX, unitNumber] of [[130, '887호'], [420, '888호'], [710, '889호']]) {
-      ctx.fillStyle = neighborVisited ? '#a7c7ad' : '#999999';
+      const doorDoneColor = neighborVisited
+        ? '#e2b8d5'
+        : doorX === 420 && guardVisited
+          ? GUARD_WINDOW_COLOR
+          : '#999999';
+      const doorDetailColor = neighborVisited
+        ? '#ba8cab'
+        : doorX === 420 && guardVisited
+          ? '#78a4ad'
+          : '#858585';
+      ctx.fillStyle = doorDoneColor;
       ctx.fillRect(doorX, 84, 120, 236);
-      ctx.fillStyle = neighborVisited ? '#789d80' : '#858585';
+      ctx.fillStyle = doorDetailColor;
       ctx.fillRect(doorX + 12, 106, 96, 32);
       ctx.save();
       ctx.fillStyle = '#dddddd';
       ctx.font = 'bold 15px sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(unitNumber, doorX + 60, 128);
-      ctx.fillStyle = '#777777';
+      ctx.fillStyle = doorDetailColor;
       ctx.fillRect(doorX + 97, 216, 8, 8);
       ctx.restore();
     }
+    drawPlayerStandingCharacter(ctx, 295, GROUND_Y, 1, 0, false, 1.9);
   } else {
     drawOutdoorBackground(ctx, scene);
   }
@@ -2359,6 +2776,7 @@ function gameLoop() {
   camera.update(player.x, currentScene.width);
   sceneTransition.update();
   updateGameFlow(deltaSeconds);
+  updateEndingScroll(deltaSeconds);
 
   // Render Frame
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -2391,6 +2809,37 @@ function gameLoop() {
 
 // Keyboard Event Handlers (Strictly Keyboard-Only Controls)
 canvas.addEventListener('pointerdown', event => {
+  if (gameFlow.mode === 'finale') {
+    const rectangle = canvas.getBoundingClientRect();
+    const pointerX = (event.clientX - rectangle.left) * canvas.width / rectangle.width;
+    const pointerY = (event.clientY - rectangle.top) * canvas.height / rectangle.height;
+    if (pointerX >= 156 && pointerX <= 194 && pointerY >= 20 && pointerY <= 58) {
+      gameFlow.finale = null;
+      gameFlow.mode = null;
+      gameFlow.selectedEnding = null;
+      endingUI.view = 'summary';
+      endingUI.scrollY = 0;
+      endingUI.scrollTargetY = 0;
+      return;
+    }
+    if (endingUI.view === 'summary') {
+      if (pointerY >= 218 && pointerY <= 254 && pointerX >= 380 && pointerX <= 580) {
+        endingUI.view = 'collection';
+        endingUI.scrollY = 0;
+        endingUI.scrollTargetY = 0;
+      }
+    } else if (pointerX >= 168 && pointerX <= 252 && pointerY >= 78 && pointerY <= 102) {
+      endingUI.view = 'summary';
+      endingUI.scrollY = 0;
+      endingUI.scrollTargetY = 0;
+    } else if (pointerY >= endingUI.scrollTop && pointerY <= endingUI.scrollBottom) {
+      endingUI.dragStartY = pointerY;
+      endingUI.dragStartScroll = endingUI.scrollTargetY;
+      canvas.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    }
+    return;
+  }
   if (gameFlow.mode !== 'choice' || event.button !== 0) return;
   const rectangle = canvas.getBoundingClientRect();
   const clickX = (event.clientX - rectangle.left) * canvas.width / rectangle.width;
@@ -2402,6 +2851,30 @@ canvas.addEventListener('pointerdown', event => {
   else if (clickX >= panelX + 352 && clickX <= panelX + 528) chooseBusPrompt(false);
   event.preventDefault();
 });
+
+canvas.addEventListener('pointermove', event => {
+  if (gameFlow.mode !== 'finale' || endingUI.view !== 'collection' || endingUI.dragStartY === null) return;
+  const rectangle = canvas.getBoundingClientRect();
+  const pointerY = (event.clientY - rectangle.top) * canvas.height / rectangle.height;
+  endingUI.scrollTargetY = Math.max(0, Math.min(endingScrollMax(), endingUI.dragStartScroll + endingUI.dragStartY - pointerY));
+  event.preventDefault();
+});
+
+function finishEndingScrollDrag(event) {
+  if (endingUI.dragStartY === null) return;
+  endingUI.dragStartY = null;
+  if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+}
+
+canvas.addEventListener('pointerup', finishEndingScrollDrag);
+canvas.addEventListener('pointercancel', finishEndingScrollDrag);
+
+canvas.addEventListener('wheel', event => {
+  if (gameFlow.mode !== 'finale' || endingUI.view !== 'collection') return;
+  const wheelDistance = event.deltaY * canvas.height / canvas.getBoundingClientRect().height * 0.35;
+  endingUI.scrollTargetY = Math.max(0, Math.min(endingScrollMax(), endingUI.scrollTargetY + wheelDistance));
+  event.preventDefault();
+}, { passive: false });
 
 window.addEventListener('keydown', (e) => {
   window.soundEngine.ensureResume();
@@ -2485,6 +2958,7 @@ window.addEventListener('keydown', (e) => {
     gameFlow.grandmaState = 'none';
     gameFlow.grandmaTalkStep = 0;
     gameFlow.choiceKind = null;
+    gameFlow.dialogueSequence = null;
     gameFlow.day = 1;
     gameFlow.selectedEnding = null;
     gameFlow.finale = null;
