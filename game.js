@@ -2079,9 +2079,11 @@ function drawOutdoorBackground(ctx, scene) {
     ctx.fillRect(0, 0, 960, 320);
 
     // A narrow apartment block sits beneath a canopy along the top edge.
-    ctx.fillStyle = gameFlow.completed.has('stone') ? '#93b181' : wall;
+    const guardDone = gameFlow.completed.has('guard');
+    const stoneDone = gameFlow.completed.has('stone');
+    ctx.fillStyle = guardDone ? '#739bb5' : stoneDone ? '#93b181' : wall;
     ctx.fillRect(0, 28, 75, 292);
-    const canopyColor = gameFlow.completed.has('stone') ? '#91a765' : mid;
+    const canopyColor = guardDone ? '#517892' : stoneDone ? '#91a765' : mid;
     ctx.fillStyle = canopyColor;
     ctx.fillRect(0, 0, 155, 32);
     ctx.fillStyle = canopyColor;
@@ -2120,7 +2122,6 @@ function drawOutdoorBackground(ctx, scene) {
     ctx.restore();
 
     // Guard booth is flush with the right edge and the screen bottom.
-    const guardDone = gameFlow.completed.has('guard');
     ctx.fillStyle = guardDone ? '#739bb5' : '#777777';
     ctx.fillRect(744, 0, 216, 320);
     ctx.fillStyle = guardDone ? '#517892' : wall;
@@ -2404,7 +2405,11 @@ function drawOutdoorForeground(ctx, scene) {
     ctx.fillRect(busArrival.x + 675, 203, 22, 32);
   }
   if (scene.id === 'home_front' && player.facing === -1) {
-    ctx.fillStyle = gameFlow.completed.has('stone') ? '#91a5a0' : '#858585';
+    ctx.fillStyle = gameFlow.completed.has('guard')
+      ? '#739bb5'
+      : gameFlow.completed.has('stone')
+        ? '#93b181'
+        : '#858585';
     ctx.fillRect(0, 34, 75, 286);
   }
 }
