@@ -2923,8 +2923,9 @@ function gameLoop() {
   requestAnimationFrame(gameLoop);
 }
 
-// Keyboard Event Handlers (Strictly Keyboard-Only Controls)
+// Keyboard & Pointer Event Handlers
 canvas.addEventListener('pointerdown', event => {
+  window.soundEngine?.ensureResume?.();
   if (showShortcutHelp) {
     const rectangle = canvas.getBoundingClientRect();
     const pointerX = (event.clientX - rectangle.left) * canvas.width / rectangle.width;
@@ -3147,11 +3148,18 @@ window.addEventListener('keydown', (e) => {
     return;
   }
 
+  // Prevent default scroll when space is pressed inside the game
+  if (e.code === 'Space' || e.key === ' ') {
+    e.preventDefault();
+  }
+
   // Horizontal Movement
   if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+    e.preventDefault();
     keys.left = true;
   }
   if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+    e.preventDefault();
     keys.right = true;
   }
   if (e.key === 'Shift') {

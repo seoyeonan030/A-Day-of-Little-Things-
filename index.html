@@ -2,17 +2,38 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#000000">
+  <meta name="description" content="오늘은 조금 다른 하루 - 동네 곳곳을 자유롭게 걸어 다니는 2D 횡스크롤 일상 탐험 / 분기형 스토리 어드벤처 게임">
+
+  <!-- Open Graph / Facebook / Kakao / Discord -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="오늘은 조금 다른 하루">
+  <meta property="og:description" content="동네 곳곳을 자유롭게 걸어 다니는 2D 횡스크롤 일상 탐험 어드벤처">
+  <meta property="og:image" content="./asset/og-image.jpeg">
+
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image">
+  <meta property="twitter:title" content="오늘은 조금 다른 하루">
+  <meta property="twitter:description" content="동네 곳곳을 자유롭게 걸어 다니는 2D 횡스크롤 일상 탐험 어드벤처">
+  <meta property="twitter:image" content="./asset/og-image.jpeg">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg">
+
   <title>오늘은 조금 다른 하루 - 2D 일상 탐험 어드벤처</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="./style.css">
 </head>
 <body>
   <div id="game-container">
-    <canvas id="viewport" width="960" height="320"></canvas>
+    <canvas id="viewport" width="960" height="320" tabindex="0" aria-label="오늘은 조금 다른 하루 게임 화면"></canvas>
+    <button id="audio-toggle" type="button" aria-label="음소거 전환" title="소리 켜기/끄기 (단축키: M)">
+      <span id="audio-icon">🔊</span>
+    </button>
   </div>
 
-  <script src="audio.js"></script>
-  <script src="game.js"></script>
-  <script src="puzzle.js"></script>
+  <script src="./audio.js"></script>
+  <script src="./puzzle.js"></script>
+  <script src="./game.js"></script>
 </body>
 </html>
