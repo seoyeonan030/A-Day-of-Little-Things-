@@ -321,7 +321,7 @@ const scenes = {
   },
   refrigerator: {
     id: 'refrigerator',
-    name: '냉장고 퍼즐',
+    name: ' ',
     width: 960,
     leftExit: null,
     rightExit: null,
@@ -467,30 +467,30 @@ function persistUnlockedTaskIds() {
 }
 
 const endingDefinitions = {
-  hidden_sea: { title: '바다에 도착한 날', description: '익숙한 하루에서 벗어나 파도 소리를 들으며 계획 없이 머물렀다.', background: '#8eb8c9', panel: '#e5f1f0', accent: '#3e788b' },
-  hidden_confession: { title: '서로의 마음', description: '오래 좋아했던 친구와 마음을 나누고 앞으로의 이야기를 함께 시작했다.', background: '#d99eb5', panel: '#fff0f4', accent: '#a94f78' },
-  kindness: { title: '다정한 하루', description: '작은 배려와 다정한 인사가 주변 사람들의 하루까지 환하게 만들었다.', background: '#e4c59d', panel: '#fff5e6', accent: '#b57845' },
-  self_happiness: { title: '나만의 행복', description: '오늘은 내가 좋아하는 순간과 하고 싶은 일에 천천히 집중했다.', background: '#b9b0d5', panel: '#f4f0ff', accent: '#71629b' },
-  food_kindness: { title: '넉넉한 마음', description: '준비한 간식과 음식이 이웃과 고양이에게 이어져 따뜻한 하루가 되었다.', background: '#e0b278', panel: '#fff3de', accent: '#a96838' },
-  nature_happiness: { title: '자연과 함께', description: '바람과 나뭇잎, 작은 생명들을 바라보며 평온한 하루를 보냈다.', background: '#9ab9a0', panel: '#edf6e9', accent: '#527b58' },
-  greetings: { title: '먼저 건넨 인사', description: '먼저 건넨 인사와 다정한 마음이 낯선 이웃까지 웃게 했다.', background: '#e0a6a0', panel: '#fff0eb', accent: '#a95755' },
+  hidden_sea: { title: '히든 엔딩-1. 일탈: 바다에 간 하루', description: '매일 반복되던 일상에서 벗어나 바다를 찾았다. 잔잔한 파도 소리를 들으며 가만히 바다를 바라보았다.', background: '#8eb8c9', panel: '#e5f1f0', accent: '#3e788b' },
+  hidden_confession: { title: '히든 엔딩-2. 마음을 전하는 하루: 숨겨왔던 마음을 보여준 하루', description: '오랫동안 마음속에 담아두고 외면했던 마음을 꺼내, 용기를 내어 말을 걸어보았다.', background: '#d99eb5', panel: '#fff0f4', accent: '#a94f78' },
+  kindness: { title: '엔딩-1: 불어나는 행복', description: '작은 배려와 다정한 인사가 주변 사람들의 하루까지 환하게 만들었다.', background: '#e4c59d', panel: '#fff5e6', accent: '#b57845' },
+  self_happiness: { title: '엔딩-2: 온전한 나만의', description: '다른 누구도 아닌, 오롯이 나의 행복에 집중한 하루를 보냈다.', background: '#b9b0d5', panel: '#f4f0ff', accent: '#71629b' },
+  food_kindness: { title: '엔딩-3: 넉넉한 마음', description: '작은 간식과 따뜻한 마음이 이웃과 고양이에게까지 전해졌다. 넉넉한 인심만큼 넉넉한 행복을 느낀 하루였다.', background: '#e0b278', panel: '#fff3de', accent: '#a96838' },
+  nature_happiness: { title: '엔딩-4: 자연과 함께', description: '바쁜 걸음을 잠시 멈추고 주변의 작은 풍경을 바라보았다. 자연 속에서 평범한 순간의 소중함을 발견한 하루였다.', background: '#9ab9a0', panel: '#edf6e9', accent: '#527b58' },
+  greetings: { title: '엔딩-5: 인사로 전하는', description: '따뜻한 말 한마디와 사소한 배려가 주변을 환하게 밝혔다. 다정함은 나눌수록 더 커지는 법이다.', background: '#e0a6a0', panel: '#fff0eb', accent: '#a95755' },
 };
 
 const sceneActivities = {
   home: [
-    { id: 'bed', x: 150, bounds: { x: 0, y: 198, width: 290, height: 122 }, label: '이불 정리하기', text: '침대 이불을 가지런히 정리했다.' },
-    { id: 'window', x: 460, bounds: { x: 367, y: 74, width: 187, height: 123 }, label: '창문 열고 바람 맞기', text: '창문을 열고 시원한 바람을 맞았다.' },
-    { id: 'cactus', x: 763, bounds: { x: 742, y: 144, width: 42, height: 64 }, label: '선인장에게 말 걸기', text: '선인장에게 말을 걸어본다. 오늘도 잘 지내자.' },
+    { id: 'bed', x: 150, bounds: { x: 0, y: 198, width: 290, height: 122 }, label: '이불 정리하기', text: '침대 이불을 가지런히 정리했다. 하루를 깔끔하게 시작할 수 있을 것 같다.' },
+    { id: 'window', x: 460, bounds: { x: 367, y: 74, width: 187, height: 123 }, label: '창문 열고 바람 맞기', text: '창문을 열고 시원한 바람을 맞았다. 기분이 상쾌해졌다.' },
+    { id: 'cactus', x: 763, bounds: { x: 742, y: 144, width: 42, height: 64 }, label: '선인장에게 말 걸기', text: '선인장에게 말을 걸어본다. 오늘도 잘 갔다올게!.' },
     { id: 'monitor', x: 890, bounds: { x: 850, y: 126, width: 80, height: 84 }, label: '모니터 과제 하기', kind: 'monitor' },
   ],
   bus: [
-    { id: 'bus_window', x: 650, bounds: { x: 576, y: 62, width: 150, height: 100 }, label: '버스 창밖 구경하기', text: '버스 창밖으로 지나가는 풍경을 구경했다.' },
+    { id: 'bus_window', x: 650, bounds: { x: 576, y: 62, width: 150, height: 100 }, label: '버스 창밖 구경하기', text: '버스 창밖으로 지나가는 풍경을 구경했다. 마음이 한결 가벼워진다.' },
     { id: 'bus_exit', x: 846, bounds: { x: 758, y: 58, width: 176, height: 262 }, label: '버스에서 내리기', kind: 'leaveBus' },
     { id: 'bus_seat_left', x: 81, bounds: { x: 56, y: 177, width: 50, height: 143 }, label: '버스 자리에 앉기', kind: 'busSeat', seatX: 81, seatY: 248 },
   ],
   living_room: [
     { id: 'kitchen_chair', x: 573, bounds: { x: 548, y: 177, width: 50, height: 143 }, label: '의자에 앉기', kind: 'seat', seatX: 573, seatY: 248 },
-    { id: 'cereal', x: 663, bounds: { x: 642, y: 192, width: 42, height: 16 }, label: '시리얼 먹기', kind: 'seatedTask', seatId: 'kitchen_chair', text: '매일 먹는 시리얼을 챙겨 먹는다.' },
+    { id: 'cereal', x: 663, bounds: { x: 642, y: 192, width: 42, height: 16 }, label: '시리얼 먹기', kind: 'seatedTask', seatId: 'kitchen_chair', text: '학교에 가기 전 시리얼을 챙겨 먹는다. 든든하게 하루를 시작할 수 있을 것 같다.' },
     { id: 'fridge', x: 55, bounds: { x: 0, y: 70, width: 111, height: 250 }, label: '고양이 간식 챙기기', kind: 'fridge' },
     { id: 'dishes', x: 185, bounds: { x: 133, y: 165, width: 99, height: 27 }, label: '설거지하기', kind: 'dishes', text: '사용한 그릇을 깨끗이 씻는다. 부엌이 한결 산뜻해졌다.' },
   ],
@@ -501,7 +501,7 @@ const sceneActivities = {
   elevator: [
     { id: 'elevator_door', x: 480, bounds: { x: 358, y: 84, width: 244, height: 236 }, label: '엘리베이터 타기', kind: 'elevatorDoor' },
     { id: 'stairs_door', x: 839, bounds: { x: 779, y: 84, width: 120, height: 236 }, label: '계단으로 내려가기', kind: 'stairDoor' },
-    { id: 'stone', x: 180, bounds: { x: 168, y: 296, width: 24, height: 24 }, label: '돌멩이 치우기', text: '누가 걸려 넘어지지 않게 돌을 치워야겠다.' },
+    { id: 'stone', x: 180, bounds: { x: 168, y: 296, width: 24, height: 24 }, label: '돌멩이 치우기', text: '엘리베이터 앞에 돌멩이가 있다. 누가 걸려 넘어지지 않게 돌을 치워야겠다.' },
   ],
   home_front: [
     { id: 'flower', x: FLOWER_CENTER + PLANTER_SHIFT, bounds: { x: FLOWER_CENTER + PLANTER_SHIFT - 14, y: FLOWER_CENTER_TOP - PLANTER_RAISE + PLANTER_DROP, width: 28, height: 264 - FLOWER_CENTER_TOP }, label: '꽃 향기 맡기', text: '꽃 향기를 맡아본다. 생각보다 좋은 냄새가 난다. 기분이 조금 좋아진 것 같다.' },
@@ -514,20 +514,20 @@ const sceneActivities = {
     { id: 'cat_feed', x: 391, bounds: { x: 360, y: 272, width: 63, height: 48 }, label: '고양이에게 간식 주기', kind: 'catTask' },
   ],
   street: [
-    { id: 'stationery_game', x: 210, bounds: { x: 168, y: 208, width: 64, height: 112 }, label: '문방구 게임하기', text: '문방구 앞 게임기를 플레이했다.' },
-    { id: 'poem', x: 430, bounds: { x: 300, y: 98, width: 165, height: 198 }, label: '서점 창문 바라보기', text: '서점 창문 너머를 바라보았다.' },
-    { id: 'piano_sound', x: 625, bounds: { x: 540, y: 118, width: 165, height: 178 }, label: '피아노 소리에 몸 맡기기', text: '들려오는 피아노 소리에 몸을 맡겼다.' },
-    { id: 'pocha_snack', x: 850, bounds: { x: 750, y: 85, width: 190, height: 235 }, label: '포장마차에서 간식 사먹기', text: '포장마차에서 간식을 사먹었다.' },
+    { id: 'stationery_game', x: 210, bounds: { x: 168, y: 208, width: 64, height: 112 }, label: '문방구 게임하기', text: '오랜만에 문방구 앞 게임기를 플레이했다. 잠시나마 즐거운 시간을 보냈다.' },
+    { id: 'poem', x: 430, bounds: { x: 300, y: 98, width: 165, height: 198 }, label: '서점 창문 바라보기', text: '서점 창문 너머로 시의 한 구절을 읽었다. 마음이 한결 차분해진다.' },
+    { id: 'piano_sound', x: 625, bounds: { x: 540, y: 118, width: 165, height: 178 }, label: '피아노 소리에 몸 맡기기', text: '들려오는 피아노 소리에 몸을 맡겼다. 나도 모르게 몸이 리듬에 맞춰 움직였다.' },
+    { id: 'pocha_snack', x: 850, bounds: { x: 750, y: 85, width: 190, height: 235 }, label: '포장마차에서 간식 사먹기', text: '포장마차에서 간식을 사먹었다. 배가 불러 기분이 좋다.' },
   ],
   sea: [],
   school: [
     { id: 'school_main_door', x: 722, bounds: { x: 600, y: 84, width: 244, height: 236 }, label: '학교 안으로 들어가기', kind: 'schoolDoor' },
-    { id: 'school_sign', x: 292, bounds: { x: 230, y: 220, width: 120, height: 100 }, label: '쓰러진 학교 팻말 세우기', text: '쓰러진 학교 팻말을 다시 세웠다.' },
+    { id: 'school_sign', x: 292, bounds: { x: 230, y: 220, width: 120, height: 100 }, label: '쓰러진 학교 팻말 세우기', text: '쓰러진 학교 팻말을 다시 세웠다. 학교가 한결 깔끔해 보인다.' },
   ],
   school_board: [
     { id: 'school_break_friend', x: 809.625, bounds: { x: 784, y: 220, width: 52, height: 100 }, label: '친구와 이야기하기', kind: 'schoolBreakFriend' },
     { id: 'presentation', x: 480, bounds: { x: 186, y: 36, width: 588, height: 139 }, label: '선생님 앞에서 발표하기', text: '선생님: 준비한 내용을 들려줄래요? 발표를 마치자 선생님이 잘했다고 칭찬했다.' },
-    { id: 'desks_align', x: 150, bounds: { x: 60, y: 216, width: 180.75, height: 104 }, label: '어질러진 책상 줄 맞추기', text: '맨 왼쪽 책상을 정리해 모든 책상을 줄 맞춰 놓았다.' },
+    { id: 'desks_align', x: 150, bounds: { x: 60, y: 216, width: 180.75, height: 104 }, label: '어질러진 책상 줄 맞추기', text: '맨 왼쪽 책상을 정리해 모든 책상을 줄 맞춰 놓았다. 교실이 한결 깔끔해 보인다.' },
   ],
 };
 
@@ -579,7 +579,7 @@ function changeScene(sceneId, spawnX) {
     resetRefrigeratorPuzzle();
     setFlowMode('puzzle');
   } else if (sceneId === 'living_room' && previousSceneId === 'refrigerator' && gameFlow.catTreats) {
-    gameFlow.dialogue = '고양이 츄가 좋아하는 간식을 챙겼다.';
+    gameFlow.dialogue = '냉장고에 있는 고양이 간식을 챙겼다.';
     gameFlow.activityMotion = null;
     setFlowMode('dialogue');
   }
@@ -769,7 +769,7 @@ function interactWith(activity) {
     } else {
       completeTask('cat_feed');
       gameFlow.catTreats = false;
-      gameFlow.dialogue = '츄에게 간식을 건넸다. 고양이가 맛있게 먹는다.';
+      gameFlow.dialogue = '고양이에게 간식을 건넸다. 고양이가 맛있게 먹는다.';
       gameFlow.activityMotion = 'cat';
     }
     setFlowMode('dialogue');
@@ -778,10 +778,10 @@ function interactWith(activity) {
 
   if (activity.id === 'apartment_door_887') {
     startTaskDialogue('apartment_door_887', [
-      '아이: 안녕하세요! 오늘 하루는 어땠어요?',
-      '나: 학교에서 발표도 하고, 작은 일들을 해봤어. 너는 오늘 뭐 했니?',
-      '아이: 저는 그림을 그렸어요! 다음에 또 이야기해요.',
-      '나: 그래, 다음에 또 보자. 사탕도 하나 줄게.',
+      '아이: 안녕하세요! 어디 가요?',
+      '나: 나는 학교에 가는 길이야. 너는 어디 가니?',
+      '아이: 저는 유치원에 가요! 오늘은 유치원에서 그림을 그릴 거예요. 너무너무 신나요.',
+      '나: 그래, 재밌겠다. (쫑알쫑알 말을 거는 옆집 아이가 귀엽다. 주머니를 뒤져 사탕을 하나 꺼냈다.) 자 이거 줄게.',
     ]);
     return;
   }
@@ -845,7 +845,7 @@ function interactWith(activity) {
         type: 'chat',
         phase: 'typing',
         value: '',
-        target: '오늘 용기 내서 먼저 말을 걸었어. 너와 이야기할 수 있어서 정말 기뻤어. 앞으로도 계속 대화하고 싶어. 나랑 사귀어 줄래?',
+        target: '오늘 너와 이야기할 수 있어서 정말 기뻤어. 내일도 또 얘기할 수 있을까?',
         error: false,
       };
       setFlowMode('monitorTyping');
@@ -994,8 +994,8 @@ function handleGameFlowKey(event) {
         phase: 'typing',
         value: '',
         target: type === 'chat'
-          ? '나도 예전부터 너랑 친해지고 싶었어. 오늘 얘기해서 좋았고, 집에 와서도 계속 연락하고 싶어.'
-          : '예전부터 너를 좋아했어. 오늘 학교에서 처음 말을 걸어 대화해서 정말 기뻤어. 집에 와서도 계속 연락하고 싶어.',
+          ? '나도 예전부터 너랑 친해지고 싶었어. 오늘 얘기해서 좋았고, 내일도 또 얘기할 수 있으면 좋겠어!'
+          : '좋아. 내일보자!.',
         error: false,
       };
       setFlowMode('monitorTyping');
@@ -1090,7 +1090,7 @@ function handleGameFlowKey(event) {
           player.y = PLAYER_BASE_Y;
           player.facing = -1;
           player.state = 'IDLE';
-          gameFlow.dialogue = '할머니가 분홍 토끼 인형을 건넸다. 인형을 셔츠 앞주머니에 반쯤 넣었다.';
+          gameFlow.dialogue = '할머니가 분홍 토끼 인형을 건넸다. 인형을 받아 셔츠 앞주머니에 반쯤 넣었다.';
           gameFlow.grandmaTalkStep = 0;
           busJourney.state = 'moving';
           busJourney.movingUntil = performance.now() + 7500;
@@ -1740,6 +1740,24 @@ function updateEndingScroll(deltaSeconds) {
   if (Math.abs(endingUI.scrollTargetY - endingUI.scrollY) < 0.2) endingUI.scrollY = endingUI.scrollTargetY;
 }
 
+function drawNavigationArrow(ctx, x, y, angle, color = '#343a35') {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(16, 16);
+  ctx.moveTo(0, 10);
+  ctx.lineTo(0, 0);
+  ctx.lineTo(10, 0);
+  ctx.stroke();
+  ctx.restore();
+}
+
 function drawEndingOverlay(ctx) {
   const ending = gameFlow.finale;
   if (!ending) return;
@@ -1761,17 +1779,7 @@ function drawEndingOverlay(ctx) {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = ending.panel;
   ctx.fillRect(panelX, panelY, panelWidth, panelHeight);
-  ctx.strokeStyle = '#343a35';
-  ctx.lineWidth = 2.5;
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(184, 48);
-  ctx.lineTo(168, 32);
-  ctx.moveTo(168, 32);
-  ctx.lineTo(178, 32);
-  ctx.moveTo(168, 32);
-  ctx.lineTo(168, 42);
-  ctx.stroke();
+  drawNavigationArrow(ctx, panelX + 18, panelY + 18, 0);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#171a18';
@@ -2743,14 +2751,87 @@ function drawSceneBackground(ctx, scene) {
 }
 
 let showShortcutHelp = false;
+let shortcutHelpPage = 0;
+const shortcutHelpPageCount = 5;
+
+function taskNames(taskIds) {
+  const names = new Map(taskCatalog.map(([id, name]) => [id, name]));
+  return [...taskIds].map(id => names.get(id)).join('  ·  ');
+}
 
 function drawShortcutHelp(ctx) {
   ctx.save();
   ctx.fillStyle = 'rgba(25, 25, 25, 0.88)';
-  ctx.fillRect(20, 16, 920, 180);
+  ctx.fillRect(20, 16, 920, shortcutHelpPage === 0 ? 180 : 288);
   ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
+  if (shortcutHelpPage > 0) {
+    drawNavigationArrow(ctx, 40, 36, -Math.PI / 4, '#ffffff');
+  }
+  if (shortcutHelpPage < shortcutHelpPageCount - 1) {
+    drawNavigationArrow(ctx, 920, 36, 3 * Math.PI / 4, '#ffffff');
+  }
+  ctx.fillStyle = '#bdbdbd';
+  ctx.textAlign = 'center';
+  ctx.font = '11px sans-serif';
+  ctx.fillText(`${shortcutHelpPage + 1} / ${shortcutHelpPageCount}`, 480, 36);
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#ffffff';
+  if (shortcutHelpPage > 0) {
+    ctx.font = 'bold 14px sans-serif';
+    ctx.fillText(['', '일반 엔딩', '나만의 행복 과제', '지정 과제 엔딩', '히든 엔딩'][shortcutHelpPage], 76, 36);
+    ctx.font = '12px sans-serif';
+    if (shortcutHelpPage === 1) {
+      ctx.fillText('일반 과제 5개를 완료하고 학교에 다녀온 뒤 집으로 돌아오면 엔딩이 나옵니다.', 36, 76);
+      ctx.fillText('다정한 하루: 배려 과제 3개 이상', 36, 108);
+      ctx.fillText('나만의 행복: 배려 과제가 아닌 일반 과제 3개 이상', 36, 140);
+      ctx.fillStyle = '#bdbdbd';
+      ctx.fillText('배려 과제', 36, 182);
+      ctx.fillText(taskNames([...kindnessTaskIds].slice(0, 4)), 36, 208);
+      ctx.fillText(taskNames([...kindnessTaskIds].slice(4)), 36, 232);
+      ctx.fillText('지정 과제 조합은 일반 엔딩보다 우선합니다. 모니터 과제는 일반 과제 수에 포함되지 않습니다.', 36, 268);
+    } else if (shortcutHelpPage === 2) {
+      const personalTasks = taskCatalog.filter(([id]) => !kindnessTaskIds.has(id) && !id.startsWith('monitor_'));
+      ctx.fillText('아래 과제 중 3개 이상을 포함해 일반 과제 5개를 완료하세요.', 36, 76);
+      ctx.fillStyle = '#d5d5d5';
+      for (let index = 0; index < personalTasks.length; index += 4) {
+        ctx.fillText(personalTasks.slice(index, index + 4).map(([, name]) => name).join('  ·  '), 36, 112 + index / 4 * 30);
+      }
+      ctx.fillStyle = '#bdbdbd';
+      ctx.fillText('지정 과제 조합은 나만의 행복보다 우선합니다.', 36, 270);
+    } else if (shortcutHelpPage === 3) {
+      const groups = [
+        ['넉넉한 마음', foodEndingTaskIds],
+        ['자연과 함께', natureEndingTaskIds],
+        ['먼저 건넨 인사', greetingEndingTaskIds],
+      ];
+      groups.forEach(([title, ids], index) => {
+        const top = 72 + index * 68;
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.fillText(title, 36, top);
+        ctx.fillStyle = '#d5d5d5';
+        ctx.font = '12px sans-serif';
+        ctx.fillText(taskNames(ids), 36, top + 24);
+      });
+      ctx.fillStyle = '#bdbdbd';
+      ctx.fillText('각 엔딩의 과제 5개를 모두 완료한 뒤 학교에 다녀와 집으로 돌아오세요.', 36, 274);
+    } else {
+      ctx.font = 'bold 13px sans-serif';
+      ctx.fillText('바다에 도착한 날', 36, 80);
+      ctx.font = '12px sans-serif';
+      ctx.fillText('버스를 타고 학교 다음 정류장인 바다에 도착합니다.', 36, 106);
+      ctx.font = 'bold 13px sans-serif';
+      ctx.fillText('서로의 마음', 36, 154);
+      ctx.font = '12px sans-serif';
+      ctx.fillText('교실의 친구와 대화한 뒤 집으로 돌아와 모니터 과제를 완료합니다.', 36, 180);
+      ctx.fillStyle = '#bdbdbd';
+      ctx.fillText('히든 엔딩은 일반 과제 완료 수와 관계없이 열립니다.', 36, 232);
+    }
+    ctx.restore();
+    return;
+  }
   ctx.font = 'bold 14px sans-serif';
   ctx.fillText('맵 바로 이동', 36, 36);
   ctx.font = '13px sans-serif';
@@ -2814,6 +2895,16 @@ function gameLoop() {
 
 // Keyboard Event Handlers (Strictly Keyboard-Only Controls)
 canvas.addEventListener('pointerdown', event => {
+  if (showShortcutHelp) {
+    const rectangle = canvas.getBoundingClientRect();
+    const pointerX = (event.clientX - rectangle.left) * canvas.width / rectangle.width;
+    const pointerY = (event.clientY - rectangle.top) * canvas.height / rectangle.height;
+    if (pointerY >= 16 && pointerY <= 56) {
+      if (pointerX >= 20 && pointerX <= 76 && shortcutHelpPage > 0) shortcutHelpPage--;
+      else if (pointerX >= 884 && pointerX <= 940 && shortcutHelpPage < shortcutHelpPageCount - 1) shortcutHelpPage++;
+    }
+    return;
+  }
   if (gameFlow.mode === 'finale') {
     const rectangle = canvas.getBoundingClientRect();
     const pointerX = (event.clientX - rectangle.left) * canvas.width / rectangle.width;
@@ -2893,7 +2984,17 @@ window.addEventListener('keydown', (e) => {
   }
   if (e.key === 'Tab') {
     e.preventDefault();
-    if (!e.repeat) showShortcutHelp = !showShortcutHelp;
+    if (!e.repeat) {
+      showShortcutHelp = !showShortcutHelp;
+      if (showShortcutHelp) shortcutHelpPage = 0;
+      keys.left = false;
+      keys.right = false;
+    }
+    return;
+  }
+  if (showShortcutHelp && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+    e.preventDefault();
+    if (!e.repeat) shortcutHelpPage = Math.max(0, Math.min(shortcutHelpPageCount - 1, shortcutHelpPage + (e.key === 'ArrowRight' ? 1 : -1)));
     return;
   }
   if (!sceneTransition.active && /^[0-9]$/.test(e.key)) {
