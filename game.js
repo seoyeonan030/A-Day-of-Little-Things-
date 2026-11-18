@@ -790,7 +790,7 @@ function interactWith(activity) {
     player.facing = -1;
     startTaskDialogue('friend_confession', [
       '나: 안녕! 혹시 나 알아? 나 작년에도 같은 반이었는데...',
-      '친구: 당연히 알지!.',
+      '친구: 당연히 알지!',
       '서로의 취향과 관심사 등 사소한 이야기를 나눴다.',
       '나: ... 괜찮다면 연락처 알려줄래?',
       '친구: 좋아!.',
