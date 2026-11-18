@@ -525,7 +525,7 @@ const sceneActivities = {
     { id: 'school_sign', x: 292, bounds: { x: 230, y: 220, width: 120, height: 100 }, label: '쓰러진 학교 팻말 세우기', text: '쓰러진 학교 팻말을 다시 세웠다. 학교가 한결 깔끔해 보인다.' },
   ],
   school_board: [
-    { id: 'school_break_friend', x: 809.625, bounds: { x: 784, y: 220, width: 52, height: 100 }, label: '친구와 이야기하기', kind: 'schoolBreakFriend' },
+    { id: 'school_break_friend', x: 809.625, bounds: { x: 764, y: 134, width: 56, height: 186 }, label: '친구와 이야기하기', kind: 'schoolBreakFriend' },
     { id: 'presentation', x: 480, bounds: { x: 186, y: 36, width: 588, height: 139 }, label: '선생님 앞에서 발표하기', text: '선생님: 준비한 내용을 들려줄래요? 발표를 마치자 선생님이 잘했다고 칭찬했다.' },
     { id: 'desks_align', x: 150, bounds: { x: 60, y: 216, width: 180.75, height: 104 }, label: '어질러진 책상 줄 맞추기', text: '맨 왼쪽 책상을 정리해 모든 책상을 줄 맞춰 놓았다. 교실이 한결 깔끔해 보인다.' },
   ],
@@ -786,6 +786,19 @@ function interactWith(activity) {
     return;
   }
 
+  if (activity.kind === 'schoolBreakFriend') {
+    player.facing = -1;
+    startTaskDialogue('friend_confession', [
+      '나: 안녕! 혹시 나 알아? 나 작년에도 같은 반이었는데...',
+      '친구: 당연히 알지!.',
+      '서로의 취향과 관심사 등 사소한 이야기를 나눴다.',
+      '나: ... 괜찮다면 연락처 알려줄래?',
+      '친구: 좋아!.',
+      '서로의 연락처를 교환했다.',
+    ]);
+    return;
+  }
+
   if (activity.id === 'presentation') {
     player.facing = 1;
     startTaskDialogue('presentation', [
@@ -823,19 +836,6 @@ function interactWith(activity) {
     gameFlow.dialogue = '부모님이 하실 테니까 굳이 안 해도 될 것 같다.';
     gameFlow.activityMotion = null;
     setFlowMode('dialogue');
-    return;
-  }
-
-  if (activity.kind === 'schoolBreakFriend') {
-    completeTask('friend_confession');
-    gameFlow.completed.add(activity.id);
-    gameFlow.hiddenConfessionActive = true;
-    gameFlow.selectedEnding = null;
-    player.sitting = null;
-    gameFlow.dialogue = null;
-    gameFlow.activityMotion = null;
-    setFlowMode(null);
-    sceneTransition.start('home', 680);
     return;
   }
 
@@ -1009,6 +1009,11 @@ function handleGameFlowKey(event) {
     if (event.key === 'Escape') {
       event.preventDefault();
       closeMonitorTask();
+    } else if (event.key === ' ' && gameFlow.monitorTask?.error) {
+      event.preventDefault();
+      gameFlow.monitorTask.value = '';
+      gameFlow.monitorTask.error = false;
+      if (monitorTaskInput) monitorTaskInput.value = '';
     } else if (event.key === 'Enter') {
       event.preventDefault();
       if (gameFlow.monitorTask?.value === gameFlow.monitorTask?.target) {
@@ -1065,6 +1070,11 @@ function handleGameFlowKey(event) {
           gameFlow.activityMotion = null;
           completeTask(taskId);
           setFlowMode(null);
+          if (taskId === 'friend_confession') {
+            gameFlow.hiddenConfessionActive = true;
+            gameFlow.selectedEnding = null;
+            sceneTransition.start('home', 680);
+          }
         } else {
           gameFlow.dialogue = gameFlow.dialogueSequence.lines[gameFlow.dialogueSequence.index];
           setFlowMode('dialogue', 3600000);
@@ -1519,6 +1529,26 @@ function drawNearbyActivityHighlight(ctx) {
     ctx.lineTo(462, 236);
     ctx.lineTo(462, 230);
     ctx.lineTo(459, 230);
+    ctx.closePath();
+    ctx.stroke();
+  } else if (activity.id === 'school_break_friend') {
+    ctx.beginPath();
+    ctx.moveTo(786.8, 134.6);
+    ctx.lineTo(819.1, 134.6);
+    ctx.lineTo(819.1, 263.8);
+    ctx.lineTo(790.6, 263.8);
+    ctx.lineTo(790.6, 310.5);
+    ctx.lineTo(790.6, 320);
+    ctx.lineTo(764, 320);
+    ctx.lineTo(764, 310.5);
+    ctx.lineTo(775.4, 310.5);
+    ctx.lineTo(775.4, 260);
+    ctx.lineTo(777.3, 248.6);
+    ctx.lineTo(797.1, 248.6);
+    ctx.lineTo(797.1, 187.8);
+    ctx.lineTo(803.9, 187.8);
+    ctx.lineTo(803.9, 176.4);
+    ctx.lineTo(786.8, 176.4);
     ctx.closePath();
     ctx.stroke();
   } else if (activity.id === 'presentation') {
