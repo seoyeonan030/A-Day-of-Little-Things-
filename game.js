@@ -8,6 +8,7 @@ endingBackdrop.height = canvas.height;
 const endingBackdropContext = endingBackdrop.getContext('2d');
 const endingUI = {
   view: 'summary',
+  showEndTitle: false,
   scrollTop: 110,
   scrollBottom: 276,
   contentHeight: 574,
@@ -392,6 +393,7 @@ const greetingEndingTaskIds = new Set(['apartment_door_887', 'cactus', 'guard', 
 function showEnding(endingId) {
   const ending = endingDefinitions[endingId];
   if (!ending) return;
+  endingUI.showEndTitle = false;
   const hiddenTaskId = endingId === 'hidden_sea' ? 'hidden_sea' : endingId === 'hidden_confession' ? 'friend_confession' : null;
   if (hiddenTaskId) gameFlow.runTaskIds.add(hiddenTaskId);
   for (const taskId of gameFlow.runTaskIds) gameFlow.unlockedTaskIds.add(taskId);
@@ -637,6 +639,78 @@ function setFlowMode(mode, dialogueDuration = 1500) {
 
 let monitorTaskInput = null;
 
+function normalizeMonitorText(text) {
+  return text.normalize('NFC');
+}
+
+function isMonitorTaskCorrect(value, target) {
+  return normalizeMonitorText(value) === normalizeMonitorText(target);
+}
+
+function getMonitorTaskDiff(expectedText, actualText) {
+  const expected = Array.from(normalizeMonitorText(expectedText));
+  const actual = Array.from(normalizeMonitorText(actualText));
+  const distances = Array.from({ length: expected.length + 1 }, () => Array(actual.length + 1).fill(0));
+
+  for (let expectedIndex = expected.length; expectedIndex >= 0; expectedIndex--) {
+    distances[expectedIndex][actual.length] = expected.length - expectedIndex;
+  }
+  for (let actualIndex = actual.length; actualIndex >= 0; actualIndex--) {
+    distances[expected.length][actualIndex] = actual.length - actualIndex;
+  }
+  for (let expectedIndex = expected.length - 1; expectedIndex >= 0; expectedIndex--) {
+    for (let actualIndex = actual.length - 1; actualIndex >= 0; actualIndex--) {
+      distances[expectedIndex][actualIndex] = expected[expectedIndex] === actual[actualIndex]
+        ? distances[expectedIndex + 1][actualIndex + 1]
+        : 1 + Math.min(
+          distances[expectedIndex + 1][actualIndex + 1],
+          distances[expectedIndex + 1][actualIndex],
+          distances[expectedIndex][actualIndex + 1],
+        );
+    }
+  }
+
+  const expectedErrors = Array(expected.length).fill(false);
+  const actualErrors = Array(actual.length).fill(false);
+  let expectedIndex = 0;
+  let actualIndex = 0;
+  while (expectedIndex < expected.length || actualIndex < actual.length) {
+    if (expectedIndex < expected.length && actualIndex < actual.length && expected[expectedIndex] === actual[actualIndex]) {
+      expectedIndex++;
+      actualIndex++;
+      continue;
+    }
+
+    const currentDistance = distances[expectedIndex][actualIndex];
+    if (expectedIndex < expected.length && actualIndex < actual.length &&
+        currentDistance === 1 + distances[expectedIndex + 1][actualIndex + 1]) {
+      expectedErrors[expectedIndex++] = true;
+      actualErrors[actualIndex++] = true;
+    } else if (actualIndex < actual.length &&
+        currentDistance === 1 + distances[expectedIndex][actualIndex + 1]) {
+      actualErrors[actualIndex++] = true;
+    } else {
+      expectedErrors[expectedIndex++] = true;
+    }
+  }
+
+  return { expected, actual, expectedErrors, actualErrors };
+}
+
+function drawMonitorDiffText(context, text, errorFlags, x, y, maxWidth) {
+  context.save();
+  context.beginPath();
+  context.rect(x, y - 12, maxWidth, 24);
+  context.clip();
+  let drawX = x;
+  for (let index = 0; index < text.length; index++) {
+    context.fillStyle = errorFlags[index] ? '#ff7777' : '#ffffff';
+    context.fillText(text[index], drawX, y);
+    drawX += context.measureText(text[index]).width;
+  }
+  context.restore();
+}
+
 function focusMonitorTaskInput() {
   if (!monitorTaskInput) {
     monitorTaskInput = document.createElement('textarea');
@@ -653,7 +727,7 @@ function focusMonitorTaskInput() {
     monitorTaskInput.addEventListener('input', () => {
       if (gameFlow.mode === 'monitorTyping' && gameFlow.monitorTask) {
         gameFlow.monitorTask.value = monitorTaskInput.value;
-        if (gameFlow.monitorTask.value === gameFlow.monitorTask.target) completeMonitorTask();
+        if (isMonitorTaskCorrect(gameFlow.monitorTask.value, gameFlow.monitorTask.target)) completeMonitorTask();
       }
     });
     document.body.appendChild(monitorTaskInput);
@@ -663,7 +737,7 @@ function focusMonitorTaskInput() {
 }
 
 function completeMonitorTask() {
-  if (!gameFlow.monitorTask || gameFlow.monitorTask.value !== gameFlow.monitorTask.target) return;
+  if (!gameFlow.monitorTask || !isMonitorTaskCorrect(gameFlow.monitorTask.value, gameFlow.monitorTask.target)) return;
   completeTask(`monitor_${gameFlow.monitorTask.type}`);
   gameFlow.monitorTask.phase = 'success';
   monitorTaskInput?.blur();
@@ -1013,10 +1087,14 @@ function handleGameFlowKey(event) {
       event.preventDefault();
       gameFlow.monitorTask.value = '';
       gameFlow.monitorTask.error = false;
-      if (monitorTaskInput) monitorTaskInput.value = '';
+      if (monitorTaskInput) {
+        monitorTaskInput.value = '';
+        monitorTaskInput.focus({ preventScroll: true });
+        monitorTaskInput.setSelectionRange(0, 0);
+      }
     } else if (event.key === 'Enter') {
       event.preventDefault();
-      if (gameFlow.monitorTask?.value === gameFlow.monitorTask?.target) {
+      if (gameFlow.monitorTask && isMonitorTaskCorrect(gameFlow.monitorTask.value, gameFlow.monitorTask.target)) {
         completeMonitorTask();
       } else if (gameFlow.monitorTask) {
         gameFlow.monitorTask.error = true;
@@ -1602,6 +1680,7 @@ function drawCenterMessage(ctx, message, subtitle = '', backgroundOpacity = 0.5)
 
 function drawMonitorTaskOverlay(ctx) {
   const task = gameFlow.monitorTask;
+  const taskDiff = task.error ? getMonitorTaskDiff(task.target, task.value) : null;
   ctx.fillStyle = 'rgba(0, 0, 0, 0.72)';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = '#bdbdbd';
@@ -1653,21 +1732,29 @@ function drawMonitorTaskOverlay(ctx) {
     ctx.fillText('친구: 오늘 학교에서 먼저 말 걸어줘서 반가웠어!', 112, 86, 728);
     ctx.fillStyle = '#ffffff';
     ctx.fillText('보낼 문장 그대로 입력:', 112, 124);
-    ctx.fillText(task.target, 112, 146, 728);
   } else {
     ctx.fillStyle = '#b7c3c8';
     ctx.fillText('받는 사람: 같은 반 친구     제목: 오늘 학교에서 못한 이야기', 112, 86, 728);
     ctx.fillStyle = '#ffffff';
     ctx.fillText('메일 내용 그대로 입력:', 112, 124);
+  }
+  if (taskDiff) {
+    drawMonitorDiffText(ctx, taskDiff.expected, taskDiff.expectedErrors, 112, 146, 728);
+  } else {
+    ctx.fillStyle = '#ffffff';
     ctx.fillText(task.target, 112, 146, 728);
   }
   ctx.fillStyle = '#f1f1f1';
   ctx.fillRect(108, 174, 744, 52);
   ctx.fillStyle = '#282d30';
   ctx.fillRect(112, 178, 736, 44);
-  ctx.fillStyle = '#ffffff';
   ctx.font = '12px sans-serif';
-  ctx.fillText(task.value || '여기에 입력하세요…', 122, 200, 716);
+  if (taskDiff && task.value) {
+    drawMonitorDiffText(ctx, taskDiff.actual, taskDiff.actualErrors, 122, 200, 716);
+  } else {
+    ctx.fillStyle = task.value ? '#ffffff' : '#c4cbd0';
+    ctx.fillText(task.value || '여기에 입력하세요…', 122, 200, 716);
+  }
   ctx.fillStyle = task.error ? '#ffaaaa' : '#c4cbd0';
   ctx.fillText(task.error ? '문장이 정확히 일치하지 않습니다. 고쳐서 다시 입력하세요.' : '문장을 완벽하게 입력하면 자동으로 완료됩니다 · Esc 닫기', 112, 258, 728);
 }
@@ -1943,6 +2030,28 @@ function drawEndingOverlay(ctx) {
   ctx.restore();
 }
 
+function drawEndTitle(ctx) {
+  ctx.save();
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = 'bold 28px sans-serif';
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+  ctx.shadowBlur = 6;
+  ctx.shadowOffsetY = 2;
+  ctx.fillText('-THE END-', canvas.width / 2, canvas.height / 2);
+  ctx.shadowColor = 'transparent';
+  ctx.fillStyle = '#e5f1f0';
+  ctx.fillRect(390, 202, 180, 42);
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(390.5, 202.5, 179, 41);
+  ctx.fillStyle = '#243a40';
+  ctx.font = 'bold 14px sans-serif';
+  ctx.fillText('게임 다시하기', canvas.width / 2, 223);
+  ctx.restore();
+}
+
 function drawFlowOverlay(ctx) {
   if (['monitorMenu', 'monitorTyping', 'monitorSuccess'].includes(gameFlow.mode)) {
     drawMonitorTaskOverlay(ctx);
@@ -2118,10 +2227,10 @@ function drawOutdoorBackground(ctx, scene) {
 
     // A narrow apartment block sits beneath a canopy along the top edge.
     const guardDone = gameFlow.completed.has('guard');
-    const stoneDone = gameFlow.completed.has('stone');
-    ctx.fillStyle = guardDone ? '#739bb5' : stoneDone ? '#93b181' : wall;
+    const stairsDone = gameFlow.completed.has('stairs_door');
+    ctx.fillStyle = stairsDone ? '#e2b8d5' : wall;
     ctx.fillRect(0, 28, 75, 292);
-    const canopyColor = guardDone ? '#517892' : stoneDone ? '#91a765' : mid;
+    const canopyColor = stairsDone ? '#ba8cab' : mid;
     ctx.fillStyle = canopyColor;
     ctx.fillRect(0, 0, 155, 32);
     ctx.fillStyle = canopyColor;
@@ -2443,11 +2552,7 @@ function drawOutdoorForeground(ctx, scene) {
     ctx.fillRect(busArrival.x + 675, 203, 22, 32);
   }
   if (scene.id === 'home_front' && player.facing === -1) {
-    ctx.fillStyle = gameFlow.completed.has('guard')
-      ? '#739bb5'
-      : gameFlow.completed.has('stone')
-        ? '#93b181'
-        : '#858585';
+    ctx.fillStyle = gameFlow.completed.has('stairs_door') ? '#e2b8d5' : '#858585';
     ctx.fillRect(0, 34, 75, 286);
   }
 }
@@ -2918,6 +3023,7 @@ function gameLoop() {
 
   // Screen Fade Transition
   sceneTransition.draw(ctx);
+  if (endingUI.showEndTitle) drawEndTitle(ctx);
   if (showShortcutHelp) drawShortcutHelp(ctx);
 
   requestAnimationFrame(gameLoop);
@@ -2926,6 +3032,15 @@ function gameLoop() {
 // Keyboard & Pointer Event Handlers
 canvas.addEventListener('pointerdown', event => {
   window.soundEngine?.ensureResume?.();
+  if (endingUI.showEndTitle) {
+    const rectangle = canvas.getBoundingClientRect();
+    const pointerX = (event.clientX - rectangle.left) * canvas.width / rectangle.width;
+    const pointerY = (event.clientY - rectangle.top) * canvas.height / rectangle.height;
+    if (pointerX >= 390 && pointerX <= 570 && pointerY >= 202 && pointerY <= 244) {
+      window.location.reload();
+    }
+    return;
+  }
   if (showShortcutHelp) {
     const rectangle = canvas.getBoundingClientRect();
     const pointerX = (event.clientX - rectangle.left) * canvas.width / rectangle.width;
@@ -2941,6 +3056,7 @@ canvas.addEventListener('pointerdown', event => {
     const pointerX = (event.clientX - rectangle.left) * canvas.width / rectangle.width;
     const pointerY = (event.clientY - rectangle.top) * canvas.height / rectangle.height;
     if (pointerX >= 156 && pointerX <= 194 && pointerY >= 20 && pointerY <= 58) {
+      endingUI.showEndTitle = true;
       gameFlow.finale = null;
       gameFlow.mode = null;
       gameFlow.selectedEnding = null;
@@ -3099,6 +3215,7 @@ window.addEventListener('keydown', (e) => {
     gameFlow.day = 1;
     gameFlow.selectedEnding = null;
     gameFlow.finale = null;
+    endingUI.showEndTitle = false;
     gameFlow.dialogue = null;
     gameFlow.typing = null;
     gameFlow.calmTime = 0;
