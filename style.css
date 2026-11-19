@@ -45,6 +45,36 @@ canvas#viewport {
   outline: none;
 }
 
+/* Monitor Task Input Field */
+#monitor-task-input {
+  position: absolute;
+  box-sizing: border-box;
+  background: #282d30;
+  color: #ffffff;
+  border: 2px solid #f1f1f1;
+  border-radius: 2px;
+  outline: none;
+  font-family: inherit;
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+  caret-color: #ffffff;
+  z-index: 20;
+  display: none;
+}
+
+#monitor-task-input::placeholder {
+  color: #c4cbd0;
+}
+
+#monitor-task-input:focus {
+  border-color: #ffffff;
+}
+
+#monitor-task-input.error {
+  border-color: #ff7777;
+}
+
 /* Audio Mute/Unmute Toggle Button */
 #audio-toggle {
   position: absolute;

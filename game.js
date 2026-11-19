@@ -9,6 +9,8 @@ const endingBackdropContext = endingBackdrop.getContext('2d');
 const endingUI = {
   view: 'summary',
   showEndTitle: false,
+  savedEnding: null,
+  mapWallColor: null,
   scrollTop: 110,
   scrollBottom: 276,
   contentHeight: 574,
@@ -33,6 +35,10 @@ const GUARD_WINDOW_COLOR = '#d5edfa';
 function getWindowColor(defaultColor) {
   return defaultColor;
 }
+
+function getMapWallColor(defaultColor) {
+  return endingUI.mapWallColor || defaultColor;
+}
 const BUS_STOP_LEFT_SHIFT = 40;
 const BUS_WIDTH = 697;
 const BUS_STOP_POSITION = 920 - BUS_STOP_LEFT_SHIFT - BUS_WIDTH;
@@ -54,9 +60,9 @@ const camera = {
   y: 0,
   width: canvas.width / VIEW_ZOOM,
   height: canvas.height / VIEW_ZOOM,
-  update(targetX, worldWidth) {
+  update(targetX, worldWidth, frameScale = 1) {
     const desiredX = targetX - this.width / 2;
-    this.x += (desiredX - this.x) * 0.1;
+    this.x += (desiredX - this.x) * (1 - Math.pow(0.9, frameScale));
     this.x = Math.max(0, Math.min(worldWidth - this.width, this.x));
   }
 };
@@ -85,18 +91,18 @@ const sceneTransition = {
     window.soundEngine.playFootstep();
   },
 
-  update() {
+  update(deltaSeconds = 1 / 60) {
     if (!this.active) return;
 
     if (this.state === 'out') {
-      this.alpha += 0.09;
+      this.alpha += 10.4 * deltaSeconds;
       if (this.alpha >= 1) {
         this.alpha = 1;
         changeScene(this.targetScene, this.targetX);
         this.state = 'in';
       }
     } else if (this.state === 'in') {
-      this.alpha -= 0.09;
+      this.alpha -= 10.4 * deltaSeconds;
       if (this.alpha <= 0) {
         this.alpha = 0;
         this.active = false;
@@ -121,7 +127,7 @@ const player = {
   width: 36,
   height: 72,
   vx: 0,
-  speed: 1.0,
+  speed: 1.95,
   facing: 1, // 1: right, -1: left
   walkPhase: 0,
   idlePhase: 0,
@@ -129,8 +135,9 @@ const player = {
   sitting: null,
   stepCooldown: 0,
 
-  update(currentScene) {
-    this.idlePhase += 0.035;
+  update(currentScene, deltaSeconds = 1 / 60) {
+    const frameScale = Math.min(deltaSeconds * 60, 3);
+    this.idlePhase += 0.035 * frameScale;
 
     if (sceneTransition.active || (currentScene.id === 'elevator' && elevatorRide.startedAt !== null) ||
       (busArrival.state === 'departing' &&
@@ -153,20 +160,20 @@ const player = {
       this.vx = -this.speed * (keys.speedBoost ? 6 : 1);
       this.facing = -1;
       this.state = 'WALK';
-      this.walkPhase += 0.12;
-      this.handleFootsteps();
+      this.walkPhase += 0.12 * frameScale;
+      this.handleFootsteps(frameScale);
     } else if (keys.right && !keys.left) {
       this.vx = this.speed * (keys.speedBoost ? 6 : 1);
       this.facing = 1;
       this.state = 'WALK';
-      this.walkPhase += 0.12;
-      this.handleFootsteps();
+      this.walkPhase += 0.12 * frameScale;
+      this.handleFootsteps(frameScale);
     } else {
       this.vx = 0;
       this.state = 'IDLE';
     }
 
-    this.x += this.vx;
+    this.x += this.vx * frameScale;
 
     // Boundary Transitions
     if (currentScene.leftExit && this.x <= 25) {
@@ -180,8 +187,8 @@ const player = {
     }
   },
 
-  handleFootsteps() {
-    this.stepCooldown--;
+  handleFootsteps(frameScale = 1) {
+    this.stepCooldown -= frameScale;
     if (this.stepCooldown <= 0) {
       window.soundEngine.playFootstep();
       this.stepCooldown = 26;
@@ -394,6 +401,7 @@ function showEnding(endingId) {
   const ending = endingDefinitions[endingId];
   if (!ending) return;
   endingUI.showEndTitle = false;
+  endingUI.mapWallColor = ending.background;
   const hiddenTaskId = endingId === 'hidden_sea' ? 'hidden_sea' : endingId === 'hidden_confession' ? 'friend_confession' : null;
   if (hiddenTaskId) gameFlow.runTaskIds.add(hiddenTaskId);
   for (const taskId of gameFlow.runTaskIds) gameFlow.unlockedTaskIds.add(taskId);
@@ -403,6 +411,7 @@ function showEnding(endingId) {
   endingUI.scrollTargetY = 0;
   gameFlow.selectedEnding = endingId;
   gameFlow.finale = { ...ending, taskIds: [...gameFlow.runTaskIds] };
+  endingUI.savedEnding = { id: endingId, finale: { ...ending, taskIds: [...gameFlow.runTaskIds] } };
   gameFlow.mode = 'finale';
 }
 
@@ -424,6 +433,27 @@ function completeTask(taskId) {
   gameFlow.completed.add(taskId);
   gameFlow.runTaskIds.add(taskId);
   evaluateTaskEnding();
+}
+
+function isPostEndingReplayMode() {
+  return Boolean(endingUI.savedEnding && !gameFlow.finale && !endingUI.showEndTitle);
+}
+
+function replayTaskIdForActivity(activity) {
+  const taskIds = endingUI.savedEnding?.finale.taskIds || [];
+  const activityTaskIds = {
+    fridge: ['cat_treats'],
+    bus_seat_left: ['grandma_seat'],
+    school_break_friend: ['friend_confession'],
+    monitor: ['monitor_chat', 'monitor_email'],
+  };
+  const candidates = activityTaskIds[activity.id] || [activity.id];
+  return candidates.find(taskId => taskIds.includes(taskId)) || null;
+}
+
+function isPostEndingUtilityActivity(activity) {
+  return ['seat', 'apartmentDoor', 'stairDoor', 'homeFrontExit', 'schoolDoor', 'elevatorDoor', 'boardBus', 'leaveBus']
+    .includes(activity.kind);
 }
 
 function selectHiddenEnding(endingId) {
@@ -610,7 +640,13 @@ function changeScene(sceneId, spawnX) {
 }
 
 function currentActivities() {
+  if (endingUI.showEndTitle || gameFlow.mode === 'finale' || endingUI.savedEnding) {
+    return [];
+  }
   const activities = (sceneActivities[currentSceneId] || []).filter(activity => {
+    if (isPostEndingReplayMode()) {
+      return replayTaskIdForActivity(activity) !== null || isPostEndingUtilityActivity(activity);
+    }
     if (activity.id === 'monitor' && !gameFlow.hiddenConfessionActive) return false;
     if (activity.id === 'fridge') return !gameFlow.completed.has('cat_treats');
     if (activity.id === 'cereal') return player.sitting?.seatId === 'kitchen_chair';
@@ -631,6 +667,9 @@ function currentActivities() {
 
 function setFlowMode(mode, dialogueDuration = 1500) {
   gameFlow.mode = mode;
+  if (mode !== 'monitorTyping') {
+    hideMonitorTaskInput();
+  }
   if (mode === 'dialogue') gameFlow.dialogueUntil = performance.now() + dialogueDuration;
   keys.left = false;
   keys.right = false;
@@ -711,36 +750,111 @@ function drawMonitorDiffText(context, text, errorFlags, x, y, maxWidth) {
   context.restore();
 }
 
-function focusMonitorTaskInput() {
+function ensureMonitorTaskInput() {
   if (!monitorTaskInput) {
-    monitorTaskInput = document.createElement('textarea');
+    monitorTaskInput = document.getElementById('monitor-task-input');
+  }
+  if (!monitorTaskInput) {
+    const container = document.getElementById('game-container') || document.body;
+    monitorTaskInput = document.createElement('input');
+    monitorTaskInput.type = 'text';
+    monitorTaskInput.id = 'monitor-task-input';
     monitorTaskInput.setAttribute('aria-label', '모니터 과제 입력');
-    Object.assign(monitorTaskInput.style, {
-      position: 'fixed',
-      left: '-10000px',
-      top: '0',
-      width: '1px',
-      height: '1px',
-      opacity: '0',
-      resize: 'none',
-    });
+    monitorTaskInput.setAttribute('autocomplete', 'off');
+    monitorTaskInput.setAttribute('autocorrect', 'off');
+    monitorTaskInput.setAttribute('autocapitalize', 'off');
+    monitorTaskInput.setAttribute('spellcheck', 'false');
+    monitorTaskInput.placeholder = '여기에 입력하세요…';
+    container.appendChild(monitorTaskInput);
+  }
+
+  if (!monitorTaskInput._initialized) {
+    monitorTaskInput._initialized = true;
     monitorTaskInput.addEventListener('input', () => {
       if (gameFlow.mode === 'monitorTyping' && gameFlow.monitorTask) {
         gameFlow.monitorTask.value = monitorTaskInput.value;
-        if (isMonitorTaskCorrect(gameFlow.monitorTask.value, gameFlow.monitorTask.target)) completeMonitorTask();
+        if (gameFlow.monitorTask.error) {
+          gameFlow.monitorTask.error = false;
+          gameFlow.monitorTask.diff = null;
+          monitorTaskInput.classList.remove('error');
+        }
+        if (isMonitorTaskCorrect(gameFlow.monitorTask.value, gameFlow.monitorTask.target)) {
+          completeMonitorTask();
+        }
       }
     });
-    document.body.appendChild(monitorTaskInput);
+    monitorTaskInput.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeMonitorTask();
+      } else if (event.key === 'Enter') {
+        if (event.isComposing) return;
+        event.preventDefault();
+        if (gameFlow.monitorTask && isMonitorTaskCorrect(monitorTaskInput.value, gameFlow.monitorTask.target)) {
+          completeMonitorTask();
+        } else if (gameFlow.monitorTask) {
+          gameFlow.monitorTask.error = true;
+          gameFlow.monitorTask.diff = getMonitorTaskDiff(gameFlow.monitorTask.target, monitorTaskInput.value);
+          monitorTaskInput.classList.add('error');
+        }
+      } else if (event.key === 'Tab') {
+        event.preventDefault();
+      }
+    });
   }
-  monitorTaskInput.value = '';
-  monitorTaskInput.focus();
+  return monitorTaskInput;
+}
+
+function updateMonitorInputPosition() {
+  const input = monitorTaskInput || document.getElementById('monitor-task-input');
+  if (!input || !canvas) return;
+  const container = document.getElementById('game-container');
+  if (!container) return;
+  const canvasRect = canvas.getBoundingClientRect();
+  const containerRect = container.getBoundingClientRect();
+  const scale = canvasRect.width / 960;
+  const canvasX = canvasRect.left - containerRect.left;
+  const canvasY = canvasRect.top - containerRect.top;
+
+  const left = canvasX + 108 * scale;
+  const top = canvasY + 174 * scale;
+  const width = 744 * scale;
+  const height = 52 * scale;
+  const fontSize = Math.max(12, Math.round(14 * scale));
+  const paddingX = Math.round(14 * scale);
+
+  input.style.left = `${left}px`;
+  input.style.top = `${top}px`;
+  input.style.width = `${width}px`;
+  input.style.height = `${height}px`;
+  input.style.fontSize = `${fontSize}px`;
+  input.style.padding = `0 ${paddingX}px`;
+}
+
+function focusMonitorTaskInput() {
+  const input = ensureMonitorTaskInput();
+  input.value = '';
+  input.classList.remove('error');
+  input.style.display = 'block';
+  updateMonitorInputPosition();
+  input.focus();
+}
+
+function hideMonitorTaskInput() {
+  const input = monitorTaskInput || document.getElementById('monitor-task-input');
+  if (input) {
+    input.blur();
+    input.value = '';
+    input.classList.remove('error');
+    input.style.display = 'none';
+  }
 }
 
 function completeMonitorTask() {
   if (!gameFlow.monitorTask || !isMonitorTaskCorrect(gameFlow.monitorTask.value, gameFlow.monitorTask.target)) return;
   completeTask(`monitor_${gameFlow.monitorTask.type}`);
   gameFlow.monitorTask.phase = 'success';
-  monitorTaskInput?.blur();
+  hideMonitorTaskInput();
   if (gameFlow.hiddenConfessionActive) {
     gameFlow.hiddenConfessionActive = false;
     selectHiddenEnding('hidden_confession');
@@ -751,8 +865,7 @@ function completeMonitorTask() {
 }
 
 function closeMonitorTask() {
-  monitorTaskInput?.blur();
-  if (monitorTaskInput) monitorTaskInput.value = '';
+  hideMonitorTaskInput();
   gameFlow.monitorTask = null;
   setFlowMode(null);
 }
@@ -800,6 +913,25 @@ function chooseBusPrompt(answer) {
     setFlowMode('dialogue', 30000);
     return;
   }
+  if (choice === 'cat') {
+    if (answer) {
+      if (gameFlow.catTreats) {
+        completeTask('cat_feed');
+        gameFlow.catTreats = false;
+        gameFlow.dialogue = '고양이에게 간식을 건넸다. 고양이가 맛있게 먹는다.';
+        gameFlow.activityMotion = 'cat';
+      } else {
+        gameFlow.dialogue = '오늘은 간식을 못 가져왔어. 미안해, 야옹아.';
+        gameFlow.activityMotion = null;
+      }
+    } else {
+      completeTask('cat_pet');
+      gameFlow.dialogue = '고양이를 조심스럽게 쓰다듬었다.';
+      gameFlow.activityMotion = 'cat';
+    }
+    setFlowMode('dialogue');
+    return;
+  }
   if (choice === 'leave_school') {
     if (answer) {
       disembarkBus('school');
@@ -821,32 +953,28 @@ function chooseBusPrompt(answer) {
   }
 }
 
-function startTaskDialogue(taskId, lines) {
-  gameFlow.dialogueSequence = { taskId, lines, index: 0 };
+function startTaskDialogue(taskId, lines, replay = false) {
+  gameFlow.dialogueSequence = { taskId, lines, index: 0, replay };
   gameFlow.dialogue = lines[0];
   gameFlow.activityMotion = null;
   setFlowMode('dialogue', 3600000);
 }
 
 function interactWith(activity) {
+  if (isPostEndingReplayMode()) {
+    if (replayTaskIdForActivity(activity)) {
+      replayCompletedTaskDialogue(activity);
+      return;
+    }
+    if (!isPostEndingUtilityActivity(activity)) return;
+  }
   if (gameFlow.hiddenConfessionActive && activity.id !== 'monitor') return;
   window.soundEngine.playInteractionSelect();
 
   if (activity.kind === 'catTask') {
-    if (activity.id === 'cat_pet') {
-      completeTask('cat_pet');
-      gameFlow.dialogue = '고양이를 조심스럽게 쓰다듬었다.';
-      gameFlow.activityMotion = 'cat';
-    } else if (!gameFlow.catTreats) {
-      gameFlow.dialogue = '오늘은 간식을 못 가져왔어. 미안해, 야옹아.';
-      gameFlow.activityMotion = null;
-    } else {
-      completeTask('cat_feed');
-      gameFlow.catTreats = false;
-      gameFlow.dialogue = '고양이에게 간식을 건넸다. 고양이가 맛있게 먹는다.';
-      gameFlow.activityMotion = 'cat';
-    }
-    setFlowMode('dialogue');
+    gameFlow.choiceKind = 'cat';
+    gameFlow.dialogue = '고양이에게 어떻게 할까?';
+    setFlowMode('choice');
     return;
   }
 
@@ -1055,6 +1183,57 @@ function interactWith(activity) {
   setFlowMode('dialogue');
 }
 
+function replayCompletedTaskDialogue(activity) {
+  const taskId = replayTaskIdForActivity(activity);
+  if (!taskId) return;
+  window.soundEngine.playInteractionSelect();
+
+  const dialogueSequences = {
+    apartment_door_887: [
+      '아이: 안녕하세요! 어디 가요?',
+      '나: 나는 학교에 가는 길이야. 너는 어디 가니?',
+      '아이: 저는 유치원에 가요! 오늘은 유치원에서 그림을 그릴 거예요. 너무너무 신나요.',
+      '나: 그래, 재밌겠다. (쫑알쫑알 말을 거는 옆집 아이가 귀엽다. 주머니를 뒤져 사탕을 하나 꺼냈다.) 자 이거 줄게.',
+    ],
+    friend_confession: [
+      '나: 안녕! 혹시 나 알아? 나 작년에도 같은 반이었는데...',
+      '친구: 당연히 알지!',
+      '서로의 취향과 관심사 등 사소한 이야기를 나눴다.',
+      '나: ... 괜찮다면 연락처 알려줄래?',
+      '친구: 좋아!.',
+      '서로의 연락처를 교환했다.',
+    ],
+    presentation: [
+      '선생님: 준비한 발표를 들려줄래요?',
+      '나: 오늘은 익숙한 하루 속에서 발견한 작은 친절을 이야기하겠습니다.',
+      '나: 먼저 인사하고 주변을 살피니 평범한 하루도 조금 달라졌습니다.',
+      '선생님: 차분하고 좋은 발표였어요. 잘 들었습니다.',
+    ],
+  };
+
+  if (dialogueSequences[taskId]) {
+    startTaskDialogue(taskId, dialogueSequences[taskId], true);
+    return;
+  }
+
+  const replayMessages = {
+    cat_treats: '냉장고에서 고양이 간식을 챙겼다.',
+    cat_pet: '고양이를 조심스럽게 쓰다듬었다.',
+    cat_feed: '고양이에게 간식을 건넸다. 고양이가 맛있게 먹는다.',
+    stairs_door: '계단으로 내려왔더니 숨이 찼다. 별것 아니지만 건강해진 느낌이다.',
+    grandma_seat: '할머니께 자리를 양보하고 분홍 토끼 인형을 선물로 받았다.',
+    monitor_chat: '친구에게 메시지를 보냈다.',
+    monitor_email: '친구에게 메일을 보냈다.',
+  };
+  const message = replayMessages[taskId] || activity.text;
+  if (!message) return;
+  gameFlow.dialogue = taskId === 'flower' || activity.kind === 'happy'
+    ? `${message} 마음이 조금 가벼워진다. 천천히 집으로 돌아가자.`
+    : message;
+  gameFlow.activityMotion = null;
+  setFlowMode('dialogue');
+}
+
 function handleGameFlowKey(event) {
   if (!gameFlow.mode) return false;
 
@@ -1083,21 +1262,16 @@ function handleGameFlowKey(event) {
     if (event.key === 'Escape') {
       event.preventDefault();
       closeMonitorTask();
-    } else if (event.key === ' ' && gameFlow.monitorTask?.error) {
-      event.preventDefault();
-      gameFlow.monitorTask.value = '';
-      gameFlow.monitorTask.error = false;
-      if (monitorTaskInput) {
-        monitorTaskInput.value = '';
-        monitorTaskInput.focus({ preventScroll: true });
-        monitorTaskInput.setSelectionRange(0, 0);
-      }
     } else if (event.key === 'Enter') {
+      if (event.isComposing) return true;
       event.preventDefault();
       if (gameFlow.monitorTask && isMonitorTaskCorrect(gameFlow.monitorTask.value, gameFlow.monitorTask.target)) {
         completeMonitorTask();
       } else if (gameFlow.monitorTask) {
         gameFlow.monitorTask.error = true;
+        gameFlow.monitorTask.diff = getMonitorTaskDiff(gameFlow.monitorTask.target, gameFlow.monitorTask.value);
+        const input = monitorTaskInput || document.getElementById('monitor-task-input');
+        input?.classList.add('error');
       }
     } else if (event.key === 'Tab') {
       event.preventDefault();
@@ -1143,12 +1317,13 @@ function handleGameFlowKey(event) {
         gameFlow.dialogueSequence.index++;
         if (gameFlow.dialogueSequence.index >= gameFlow.dialogueSequence.lines.length) {
           const taskId = gameFlow.dialogueSequence.taskId;
+          const isReplay = gameFlow.dialogueSequence.replay;
           gameFlow.dialogueSequence = null;
           gameFlow.dialogue = null;
           gameFlow.activityMotion = null;
-          completeTask(taskId);
+          if (!isReplay) completeTask(taskId);
           setFlowMode(null);
-          if (taskId === 'friend_confession') {
+          if (taskId === 'friend_confession' && !isReplay) {
             gameFlow.hiddenConfessionActive = true;
             gameFlow.selectedEnding = null;
             sceneTransition.start('home', 680);
@@ -1680,7 +1855,7 @@ function drawCenterMessage(ctx, message, subtitle = '', backgroundOpacity = 0.5)
 
 function drawMonitorTaskOverlay(ctx) {
   const task = gameFlow.monitorTask;
-  const taskDiff = task.error ? getMonitorTaskDiff(task.target, task.value) : null;
+  const taskDiff = task.error ? task.diff : null;
   ctx.fillStyle = 'rgba(0, 0, 0, 0.72)';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = '#bdbdbd';
@@ -1748,13 +1923,6 @@ function drawMonitorTaskOverlay(ctx) {
   ctx.fillRect(108, 174, 744, 52);
   ctx.fillStyle = '#282d30';
   ctx.fillRect(112, 178, 736, 44);
-  ctx.font = '12px sans-serif';
-  if (taskDiff && task.value) {
-    drawMonitorDiffText(ctx, taskDiff.actual, taskDiff.actualErrors, 122, 200, 716);
-  } else {
-    ctx.fillStyle = task.value ? '#ffffff' : '#c4cbd0';
-    ctx.fillText(task.value || '여기에 입력하세요…', 122, 200, 716);
-  }
   ctx.fillStyle = task.error ? '#ffaaaa' : '#c4cbd0';
   ctx.fillText(task.error ? '문장이 정확히 일치하지 않습니다. 고쳐서 다시 입력하세요.' : '문장을 완벽하게 입력하면 자동으로 완료됩니다 · Esc 닫기', 112, 258, 728);
 }
@@ -1878,84 +2046,95 @@ function drawNavigationArrow(ctx, x, y, angle, color = '#343a35') {
 function drawEndingOverlay(ctx) {
   const ending = gameFlow.finale;
   if (!ending) return;
-  const panelX = 150;
-  const panelY = 24;
-  const panelWidth = 660;
-  const panelHeight = 272;
+  const panelX = 140;
+  const panelY = 16;
+  const panelWidth = 680;
+  const panelHeight = 288;
 
   ctx.save();
-  ctx.translate(camera.x, 0);
-  endingBackdropContext.clearRect(0, 0, endingBackdrop.width, endingBackdrop.height);
-  endingBackdropContext.drawImage(canvas, 0, 0);
-  ctx.filter = 'blur(5px)';
-  ctx.drawImage(endingBackdrop, -6, -6, canvas.width + 12, canvas.height + 12);
-  ctx.filter = 'none';
-  ctx.fillStyle = `${ending.background}30`;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = 'rgba(27, 35, 32, 0.34)';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = ending.panel;
   ctx.fillRect(panelX, panelY, panelWidth, panelHeight);
-  drawNavigationArrow(ctx, panelX + 18, panelY + 18, 0);
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#171a18';
-  ctx.font = 'bold 22px sans-serif';
-  ctx.fillText(ending.title, canvas.width / 2, 48, 600);
-  ctx.fillStyle = '#353a36';
-  ctx.font = '12px sans-serif';
-  ctx.fillText(ending.description, canvas.width / 2, 72, 600);
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(panelX + 0.5, panelY + 0.5, panelWidth - 1, panelHeight - 1);
+
+  const tabY = 22;
+  const tabHeight = 28;
+  ctx.strokeStyle = '#243a40';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(172, tabY + 14);
+  ctx.lineTo(154, tabY + 14);
+  ctx.lineTo(161, tabY + 7);
+  ctx.moveTo(154, tabY + 14);
+  ctx.lineTo(161, tabY + 21);
+  ctx.stroke();
 
   if (endingUI.view === 'summary') {
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#171a18';
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillText(ending.title, canvas.width / 2, 74, 620);
+    ctx.fillStyle = '#353a36';
+    ctx.font = '12px sans-serif';
+    ctx.fillText(ending.description, canvas.width / 2, 98, 620);
+
     ctx.fillStyle = '#262a27';
     ctx.font = 'bold 11px sans-serif';
-    ctx.fillText('이번 회차 과제', canvas.width / 2, 108);
+    ctx.fillText('이번 회차 과제', canvas.width / 2, 124);
     const currentTaskMap = new Map([...taskCatalog, ...hiddenTaskCatalog].map(([id, title]) => [id, title]));
     const currentTaskColors = new Map([...taskCatalog, ...hiddenTaskCatalog].map(([id, title, color]) => [id, color]));
     const currentTasks = (ending.taskIds || []).filter(id => currentTaskMap.has(id)).slice(0, 5);
-    const iconSize = 58;
+    const iconSize = 54;
     currentTasks.forEach((id, index) => {
       const centerX = canvas.width / 2 + (index - (currentTasks.length - 1) / 2) * 82;
-      const iconY = 124;
+      const iconY = 138;
       ctx.fillStyle = currentTaskColors.get(id);
       ctx.fillRect(centerX - iconSize / 2, iconY, iconSize, iconSize);
       drawTaskIllustration(ctx, id, centerX, iconY + iconSize / 2, '#ffffff');
       ctx.fillStyle = '#171a18';
       ctx.font = 'bold 9px sans-serif';
-      ctx.fillText(currentTaskMap.get(id), centerX, 193, 80);
+      ctx.fillText(currentTaskMap.get(id), centerX, 204, 80);
     });
     if (!currentTasks.length) {
       ctx.fillStyle = '#414642';
       ctx.font = '11px sans-serif';
-      ctx.fillText('이번 회차 완료 과제가 없습니다', canvas.width / 2, 150);
+      ctx.fillText('이번 회차 완료 과제가 없습니다', canvas.width / 2, 160);
     }
 
     ctx.fillStyle = '#d2d2ce';
-    ctx.fillRect(380, 218, 200, 36);
+    ctx.fillRect(380, 226, 200, 36);
+    ctx.strokeStyle = '#ffffff';
+    ctx.strokeRect(380.5, 226.5, 199, 35);
     ctx.fillStyle = '#202321';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
     ctx.font = 'bold 11px sans-serif';
-    ctx.fillText('과제 도감 보기', 480, 236);
+    ctx.fillText('과제 도감 보기', 480, 244);
   } else {
-    const viewportX = 180;
-    const viewportWidth = 600;
-    ctx.textAlign = 'left';
-    ctx.fillStyle = ending.accent;
-    ctx.font = 'bold 10px sans-serif';
-    ctx.fillText('← 엔딩으로', 180, 90);
+    // Collection View
+    const viewportX = 170;
+    const viewportWidth = 620;
     ctx.textAlign = 'center';
     ctx.fillStyle = '#343a35';
-    ctx.fillText('과제 도감', canvas.width / 2, 90);
+    ctx.font = 'bold 14px sans-serif';
+    ctx.fillText('과제 도감', canvas.width / 2, 72);
     ctx.textAlign = 'right';
     ctx.fillStyle = '#545b55';
-    ctx.font = '9px sans-serif';
-    ctx.fillText(`${gameFlow.unlockedTaskIds.size} / ${taskCatalog.length + hiddenTaskCatalog.length} 해금`, 780, 90);
+    ctx.font = '10px sans-serif';
+    ctx.fillText(`${gameFlow.unlockedTaskIds.size} / ${taskCatalog.length + hiddenTaskCatalog.length} 해금`, 780, 72);
+
+    endingUI.scrollTop = 86;
+    endingUI.scrollBottom = 284;
 
     ctx.save();
     ctx.beginPath();
     ctx.rect(viewportX, endingUI.scrollTop, viewportWidth, endingUI.scrollBottom - endingUI.scrollTop);
     ctx.clip();
     ctx.translate(0, endingUI.scrollTop - endingUI.scrollY);
-    const iconSize = 56;
+    const iconSize = 54;
     const columnWidth = 112;
     const gridWidth = columnWidth * 5;
     const gridLeft = (canvas.width - gridWidth) / 2;
@@ -1963,7 +2142,7 @@ function drawEndingOverlay(ctx) {
       const row = Math.floor(index / 5);
       const column = index % 5;
       const centerX = gridLeft + column * columnWidth + columnWidth / 2;
-      const iconY = row * 92;
+      const iconY = row * 88;
       const unlocked = gameFlow.unlockedTaskIds.has(id);
       ctx.fillStyle = unlocked ? color : '#b5b5b5';
       ctx.fillRect(centerX - iconSize / 2, iconY, iconSize, iconSize);
@@ -1973,50 +2152,50 @@ function drawEndingOverlay(ctx) {
         ctx.textBaseline = 'middle';
         ctx.font = 'bold 9px sans-serif';
         ctx.fillStyle = '#202321';
-        ctx.fillText(title, centerX, iconY + 68, columnWidth - 6);
+        ctx.fillText(title, centerX, iconY + 66, columnWidth - 6);
       } else {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.font = 'bold 34px sans-serif';
+        ctx.font = 'bold 32px sans-serif';
         ctx.fillStyle = '#ffffff';
         ctx.fillText('?', centerX, iconY + iconSize / 2 + 1);
       }
     });
 
-    const hiddenY = Math.ceil(taskCatalog.length / 5) * 92 + 16;
+    const hiddenY = Math.ceil(taskCatalog.length / 5) * 88 + 14;
     ctx.textAlign = 'left';
-    ctx.font = 'bold 9px sans-serif';
+    ctx.font = 'bold 10px sans-serif';
     ctx.fillStyle = '#737d75';
-    ctx.fillText('히든 과제', 190, hiddenY + 4);
+    ctx.fillText('히든 과제', 180, hiddenY + 4);
     hiddenTaskCatalog.forEach(([id, title, color], index) => {
       const cardWidth = 290;
-      const cardX = 190 + index * 300;
-      const cardY = hiddenY + 18;
+      const cardX = 180 + index * 300;
+      const cardY = hiddenY + 16;
       const unlocked = gameFlow.unlockedTaskIds.has(id);
       ctx.fillStyle = '#ededeb';
-      ctx.fillRect(cardX, cardY, cardWidth, 68);
+      ctx.fillRect(cardX, cardY, cardWidth, 64);
       ctx.fillStyle = unlocked ? color : '#b5b5b5';
-      ctx.fillRect(cardX + 6, cardY + 6, 56, 56);
+      ctx.fillRect(cardX + 6, cardY + 6, 52, 52);
       if (unlocked) {
-        drawTaskIllustration(ctx, id, cardX + 34, cardY + 34, '#ffffff');
+        drawTaskIllustration(ctx, id, cardX + 32, cardY + 32, '#ffffff');
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
         ctx.font = 'bold 11px sans-serif';
         ctx.fillStyle = '#202321';
-        ctx.fillText(title, cardX + 74, cardY + 34, cardWidth - 84);
+        ctx.fillText(title, cardX + 70, cardY + 32, cardWidth - 80);
       } else {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.font = 'bold 34px sans-serif';
+        ctx.font = 'bold 30px sans-serif';
         ctx.fillStyle = '#ffffff';
-        ctx.fillText('?', cardX + 34, cardY + 35);
+        ctx.fillText('?', cardX + 32, cardY + 33);
       }
     });
     ctx.restore();
 
     const maxScroll = endingScrollMax();
     if (maxScroll > 0) {
-      const trackX = 792;
+      const trackX = 796;
       const trackY = endingUI.scrollTop;
       const trackHeight = endingUI.scrollBottom - endingUI.scrollTop;
       const thumbHeight = Math.max(22, trackHeight * trackHeight / (trackHeight + maxScroll));
@@ -2035,20 +2214,33 @@ function drawEndTitle(ctx) {
   ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.font = 'bold 28px sans-serif';
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
-  ctx.shadowBlur = 6;
+  ctx.font = 'bold 36px sans-serif';
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.85)';
+  ctx.shadowBlur = 10;
   ctx.shadowOffsetY = 2;
-  ctx.fillText('-THE END-', canvas.width / 2, canvas.height / 2);
+  ctx.fillText('-THE END-', canvas.width / 2, 115);
   ctx.shadowColor = 'transparent';
+
+  const buttonY = 202;
+  const buttonHeight = 42;
+  const buttonWidth = 180;
+
   ctx.fillStyle = '#e5f1f0';
-  ctx.fillRect(390, 202, 180, 42);
+  ctx.fillRect(290, buttonY, buttonWidth, buttonHeight);
   ctx.strokeStyle = '#ffffff';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(390.5, 202.5, 179, 41);
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(290.5, buttonY + 0.5, buttonWidth - 1, buttonHeight - 1);
   ctx.fillStyle = '#243a40';
   ctx.font = 'bold 14px sans-serif';
-  ctx.fillText('게임 다시하기', canvas.width / 2, 223);
+  ctx.fillText('게임 새로하기', 380, buttonY + buttonHeight / 2);
+
+  ctx.fillStyle = '#e5f1f0';
+  ctx.fillRect(490, buttonY, buttonWidth, buttonHeight);
+  ctx.strokeStyle = '#ffffff';
+  ctx.strokeRect(490.5, buttonY + 0.5, buttonWidth - 1, buttonHeight - 1);
+  ctx.fillStyle = '#243a40';
+  ctx.fillText('과제 보기', 580, buttonY + buttonHeight / 2);
+
   ctx.restore();
 }
 
@@ -2077,8 +2269,8 @@ function drawFlowOverlay(ctx) {
     ctx.fillRect(panelX + 352, panelY + 82, 176, 46);
     ctx.fillStyle = '#ffffff';
     ctx.font = 'bold 15px sans-serif';
-    ctx.fillText('예', panelX + 200, panelY + 105);
-    ctx.fillText('아니오', panelX + 440, panelY + 105);
+    ctx.fillText(gameFlow.choiceKind === 'cat' ? '밥 주기' : '예', panelX + 200, panelY + 105);
+    ctx.fillText(gameFlow.choiceKind === 'cat' ? '쓰다듬기' : '아니오', panelX + 440, panelY + 105);
     ctx.restore();
     return;
   }
@@ -2098,7 +2290,6 @@ function drawFlowOverlay(ctx) {
     return;
   }
   if (gameFlow.mode === 'finale' && gameFlow.finale) {
-    drawEndingOverlay(ctx);
     return;
   }
 }
@@ -2216,13 +2407,13 @@ function drawRoomFurniture(ctx) {
 }
 
 function drawOutdoorBackground(ctx, scene) {
-  const wall = '#858585';
+  const wall = getMapWallColor('#858585');
   const mid = '#666666';
   const dark = '#484848';
   const light = '#dddddd';
 
   if (scene.id === 'home_front') {
-    ctx.fillStyle = '#b5b5b5';
+    ctx.fillStyle = getMapWallColor('#b5b5b5');
     ctx.fillRect(0, 0, 960, 320);
 
     // A narrow apartment block sits beneath a canopy along the top edge.
@@ -2285,7 +2476,7 @@ function drawOutdoorBackground(ctx, scene) {
   }
 
   if (scene.id === 'bus_stop') {
-    ctx.fillStyle = '#b5b5b5';
+    ctx.fillStyle = getMapWallColor('#b5b5b5');
     ctx.fillRect(0, 0, 960, 320);
     const busStopDone = gameFlow.completed.has('cat_feed');
     const treeDone = gameFlow.completed.has('tree_leaves');
@@ -2382,7 +2573,7 @@ function drawOutdoorBackground(ctx, scene) {
   }
 
   if (scene.id === 'school') {
-    ctx.fillStyle = '#b5b5b5';
+    ctx.fillStyle = getMapWallColor('#b5b5b5');
     ctx.fillRect(0, 0, 960, 320);
 
     const signRaised = gameFlow.completed.has('school_sign');
@@ -2420,7 +2611,7 @@ function drawOutdoorBackground(ctx, scene) {
   }
 
   if (scene.id === 'school_board') {
-    ctx.fillStyle = '#b5b5b5';
+    ctx.fillStyle = getMapWallColor('#b5b5b5');
     ctx.fillRect(0, 0, 960, 320);
     const presentationDone = gameFlow.completed.has('presentation');
     const desksAligned = gameFlow.completed.has('desks_align');
@@ -2454,7 +2645,7 @@ function drawOutdoorBackground(ctx, scene) {
   }
 
   if (scene.id === 'street') {
-    ctx.fillStyle = '#b5b5b5';
+    ctx.fillStyle = getMapWallColor('#b5b5b5');
     ctx.fillRect(0, 0, 960, 320);
     const stationeryDone = gameFlow.completed.has('stationery_game');
     const bookstoreDone = gameFlow.completed.has('poem');
@@ -2660,7 +2851,7 @@ function drawGrandmaStanding(ctx, x, y) {
 }
 
 function drawSceneBackground(ctx, scene) {
-  ctx.fillStyle = '#b5b5b5';
+  ctx.fillStyle = getMapWallColor('#b5b5b5');
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   if (scene.id === 'refrigerator') {
@@ -2993,9 +3184,18 @@ function gameLoop() {
   const deltaSeconds = Math.min((now - lastFlowFrame) / 1000, 0.05);
   lastFlowFrame = now;
 
-  player.update(currentScene);
-  camera.update(player.x, currentScene.width);
-  sceneTransition.update();
+  const isPostEnding = Boolean(endingUI.showEndTitle || gameFlow.mode === 'finale' || endingUI.savedEnding);
+  if (isPostEnding) {
+    keys.left = false;
+    keys.right = false;
+    keys.speedBoost = false;
+    player.vx = 0;
+    player.state = 'IDLE';
+  } else {
+    player.update(currentScene, deltaSeconds);
+    camera.update(player.x, currentScene.width, Math.min(deltaSeconds * 60, 3));
+  }
+  sceneTransition.update(deltaSeconds);
   updateGameFlow(deltaSeconds);
   updateEndingScroll(deltaSeconds);
 
@@ -3023,8 +3223,26 @@ function gameLoop() {
 
   // Screen Fade Transition
   sceneTransition.draw(ctx);
-  if (endingUI.showEndTitle) drawEndTitle(ctx);
-  if (showShortcutHelp) drawShortcutHelp(ctx);
+
+  if (isPostEnding) {
+    endingBackdropContext.clearRect(0, 0, endingBackdrop.width, endingBackdrop.height);
+    endingBackdropContext.drawImage(canvas, 0, 0);
+    ctx.save();
+    ctx.filter = 'blur(6px)';
+    ctx.drawImage(endingBackdrop, -6, -6, canvas.width + 12, canvas.height + 12);
+    ctx.filter = 'none';
+    ctx.fillStyle = 'rgba(18, 22, 26, 0.55)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
+
+    if (endingUI.showEndTitle) {
+      drawEndTitle(ctx);
+    } else if (gameFlow.mode === 'finale' && gameFlow.finale) {
+      drawEndingOverlay(ctx);
+    }
+  } else {
+    if (showShortcutHelp) drawShortcutHelp(ctx);
+  }
 
   requestAnimationFrame(gameLoop);
 }
@@ -3032,12 +3250,32 @@ function gameLoop() {
 // Keyboard & Pointer Event Handlers
 canvas.addEventListener('pointerdown', event => {
   window.soundEngine?.ensureResume?.();
+  if (gameFlow.mode === 'monitorTyping') {
+    const input = monitorTaskInput || document.getElementById('monitor-task-input');
+    input?.focus();
+    return;
+  }
   if (endingUI.showEndTitle) {
     const rectangle = canvas.getBoundingClientRect();
     const pointerX = (event.clientX - rectangle.left) * canvas.width / rectangle.width;
     const pointerY = (event.clientY - rectangle.top) * canvas.height / rectangle.height;
-    if (pointerX >= 390 && pointerX <= 570 && pointerY >= 202 && pointerY <= 244) {
-      window.location.reload();
+    if (pointerY >= 202 && pointerY <= 244) {
+      if (pointerX >= 290 && pointerX <= 470) {
+        window.location.reload();
+        return;
+      }
+      if (pointerX >= 490 && pointerX <= 670) {
+        if (endingUI.savedEnding) {
+          gameFlow.selectedEnding = endingUI.savedEnding.id;
+          gameFlow.finale = { ...endingUI.savedEnding.finale, taskIds: [...endingUI.savedEnding.finale.taskIds] };
+        }
+        endingUI.showEndTitle = false;
+        endingUI.view = 'summary';
+        endingUI.scrollY = 0;
+        endingUI.scrollTargetY = 0;
+        gameFlow.mode = 'finale';
+        return;
+      }
     }
     return;
   }
@@ -3055,31 +3293,35 @@ canvas.addEventListener('pointerdown', event => {
     const rectangle = canvas.getBoundingClientRect();
     const pointerX = (event.clientX - rectangle.left) * canvas.width / rectangle.width;
     const pointerY = (event.clientY - rectangle.top) * canvas.height / rectangle.height;
-    if (pointerX >= 156 && pointerX <= 194 && pointerY >= 20 && pointerY <= 58) {
-      endingUI.showEndTitle = true;
-      gameFlow.finale = null;
-      gameFlow.mode = null;
-      gameFlow.selectedEnding = null;
-      endingUI.view = 'summary';
-      endingUI.scrollY = 0;
-      endingUI.scrollTargetY = 0;
-      return;
+
+    // Top tab bar clicks (y: 22 to 52)
+    if (pointerY >= 22 && pointerY <= 50) {
+      if (pointerX >= 148 && pointerX <= 178) {
+        if (gameFlow.finale && gameFlow.selectedEnding) {
+          endingUI.savedEnding = {
+            id: gameFlow.selectedEnding,
+            finale: { ...gameFlow.finale, taskIds: [...gameFlow.finale.taskIds] },
+          };
+        }
+        endingUI.showEndTitle = true;
+        return;
+      }
     }
+
     if (endingUI.view === 'summary') {
-      if (pointerY >= 218 && pointerY <= 254 && pointerX >= 380 && pointerX <= 580) {
+      if (pointerY >= 224 && pointerY <= 264 && pointerX >= 380 && pointerX <= 580) {
         endingUI.view = 'collection';
         endingUI.scrollY = 0;
         endingUI.scrollTargetY = 0;
+        return;
       }
-    } else if (pointerX >= 168 && pointerX <= 252 && pointerY >= 78 && pointerY <= 102) {
-      endingUI.view = 'summary';
-      endingUI.scrollY = 0;
-      endingUI.scrollTargetY = 0;
-    } else if (pointerY >= endingUI.scrollTop && pointerY <= endingUI.scrollBottom) {
-      endingUI.dragStartY = pointerY;
-      endingUI.dragStartScroll = endingUI.scrollTargetY;
-      canvas.setPointerCapture(event.pointerId);
-      event.preventDefault();
+    } else if (endingUI.view === 'collection') {
+      if (pointerY >= endingUI.scrollTop && pointerY <= endingUI.scrollBottom) {
+        endingUI.dragStartY = pointerY;
+        endingUI.dragStartScroll = endingUI.scrollTargetY;
+        canvas.setPointerCapture(event.pointerId);
+        event.preventDefault();
+      }
     }
     return;
   }
@@ -3121,6 +3363,28 @@ canvas.addEventListener('wheel', event => {
 
 window.addEventListener('keydown', (e) => {
   window.soundEngine.ensureResume();
+  const isPostEnding = Boolean(endingUI.showEndTitle || gameFlow.mode === 'finale' || endingUI.savedEnding);
+  if (isPostEnding) {
+    if (gameFlow.mode === 'finale' && !endingUI.showEndTitle) {
+      if (endingUI.view === 'collection' && (e.key === 'ArrowDown' || e.key === 'PageDown')) {
+        endingUI.scrollTargetY = Math.min(endingScrollMax(), endingUI.scrollTargetY + 56);
+        e.preventDefault();
+        return;
+      }
+      if (endingUI.view === 'collection' && (e.key === 'ArrowUp' || e.key === 'PageUp')) {
+        endingUI.scrollTargetY = Math.max(0, endingUI.scrollTargetY - 56);
+        e.preventDefault();
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        endingUI.showEndTitle = true;
+        return;
+      }
+    }
+    e.preventDefault();
+    return;
+  }
   if (gameFlow.mode === 'choice') {
     handleGameFlowKey(e);
     return;
@@ -3222,8 +3486,7 @@ window.addEventListener('keydown', (e) => {
     gameFlow.calmText = null;
     gameFlow.calmId = null;
     gameFlow.monitorTask = null;
-    monitorTaskInput?.blur();
-    if (monitorTaskInput) monitorTaskInput.value = '';
+    hideMonitorTaskInput();
     setFlowMode(null);
     if (currentSceneId === 'refrigerator') sceneTransition.start('living_room', 100);
     updateGameFlow(0);
@@ -3286,6 +3549,13 @@ window.addEventListener('keydown', (e) => {
 });
 
 window.addEventListener('keyup', (e) => {
+  const isPostEnding = Boolean(endingUI.showEndTitle || gameFlow.mode === 'finale' || endingUI.savedEnding);
+  if (isPostEnding) {
+    keys.left = false;
+    keys.right = false;
+    keys.speedBoost = false;
+    return;
+  }
   if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
     keys.left = false;
   }
@@ -3329,6 +3599,7 @@ function handleResize() {
   w = h * targetAspect;
   canvas.style.width = `${w}px`;
   canvas.style.height = `${h}px`;
+  updateMonitorInputPosition();
 }
 
 window.addEventListener('resize', handleResize);
