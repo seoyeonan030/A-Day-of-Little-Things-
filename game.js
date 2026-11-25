@@ -382,6 +382,8 @@ const gameFlow = {
   day: 1,
   mode: null,
   selectedEnding: null,
+  taskEndingRevealAt: null,
+  hiddenSeaEndingAt: null,
   finale: null,
   runTaskIds: new Set(),
   hiddenSeaProgress: false,
@@ -414,11 +416,14 @@ function showEnding(endingId) {
   gameFlow.selectedEnding = endingId;
   gameFlow.finale = { ...ending, taskIds: [...gameFlow.runTaskIds] };
   endingUI.savedEnding = { id: endingId, finale: { ...ending, taskIds: [...gameFlow.runTaskIds] } };
+  gameFlow.taskEndingRevealAt = null;
+  gameFlow.hiddenSeaEndingAt = null;
   gameFlow.mode = 'finale';
 }
 
 function evaluateTaskEnding() {
   if (gameFlow.selectedEnding) return;
+  const previousEnding = gameFlow.selectedEnding;
   const runTasks = gameFlow.runTaskIds;
   const generalTasks = [...runTasks].filter(id => !id.startsWith('monitor_') && id !== 'friend_confession');
   const total = generalTasks.length;
@@ -429,6 +434,7 @@ function evaluateTaskEnding() {
   else if (total === 5 && hasAll(greetingEndingTaskIds)) gameFlow.selectedEnding = 'greetings';
   else if (total === 5 && [...kindnessTaskIds].filter(id => runTasks.has(id)).length >= 3) gameFlow.selectedEnding = 'kindness';
   else if (total === 5 && generalTasks.filter(id => !kindnessTaskIds.has(id)).length >= 3) gameFlow.selectedEnding = 'self_happiness';
+  if (!previousEnding && gameFlow.selectedEnding) gameFlow.taskEndingRevealAt = performance.now() + 2000;
 }
 
 function getTaskProgressColor() {
@@ -517,6 +523,21 @@ function completeTask(taskId) {
   gameFlow.completed.add(taskId);
   gameFlow.runTaskIds.add(taskId);
   evaluateTaskEnding();
+}
+
+function completeGrandmaSeatTask() {
+  gameFlow.grandmaState = 'gifted';
+  gameFlow.hasRabbitPlush = true;
+  completeTask('grandma_seat');
+  player.sitting = null;
+  player.x = 200;
+  player.y = PLAYER_BASE_Y;
+  player.facing = -1;
+  player.state = 'IDLE';
+  gameFlow.dialogue = '할머니가 분홍 토끼 인형을 건넸다. 인형을 받아 셔츠 앞주머니에 반쯤 넣었다.';
+  gameFlow.grandmaTalkStep = 0;
+  busJourney.state = 'moving';
+  busJourney.movingUntil = performance.now() + 7500;
 }
 
 function isPostEndingReplayMode() {
@@ -675,7 +696,9 @@ function changeScene(sceneId, spawnX) {
   }
   if (sceneId === 'sea') {
     selectHiddenEnding('hidden_sea');
-    showEnding('hidden_sea');
+    const arrivingByBus = previousSceneId === 'bus' &&
+      busArrival.state === 'departing' && busArrival.departureTarget === 'sea';
+    gameFlow.hiddenSeaEndingAt = arrivingByBus ? null : performance.now() + 2000;
   }
   if (sceneId === 'bus_stop') {
     if (!disembarkingBus) {
@@ -704,7 +727,8 @@ function changeScene(sceneId, spawnX) {
     gameFlow.dialogue = '집에 돌아와서도 친구와 대화를 이어갔다. 모니터를 켜서 답장을 보내자.';
     gameFlow.activityMotion = null;
     setFlowMode('dialogue');
-  } else if (sceneId === 'home' && gameFlow.visitedSchool && gameFlow.selectedEnding) {
+  } else if (sceneId === 'home' && gameFlow.visitedSchool && gameFlow.selectedEnding &&
+      (gameFlow.taskEndingRevealAt === null || performance.now() >= gameFlow.taskEndingRevealAt)) {
     showEnding(gameFlow.selectedEnding);
   }
   if (sceneId === 'home' && gameFlow.visitedSchool) {
@@ -712,7 +736,7 @@ function changeScene(sceneId, spawnX) {
     gameFlow.day++;
     gameFlow.ateToday = false;
     gameFlow.completed.delete('cereal');
-    if (!gameFlow.hiddenConfessionActive) gameFlow.runTaskIds = new Set();
+    if (!gameFlow.hiddenConfessionActive && gameFlow.taskEndingRevealAt === null) gameFlow.runTaskIds = new Set();
   }
 
   // Update Location Badge HUD
@@ -1431,18 +1455,7 @@ function handleGameFlowKey(event) {
           gameFlow.grandmaTalkStep = 2;
           gameFlow.dialogue = '할머니: 고맙다. 이건 선물이란다.';
         } else {
-          gameFlow.grandmaState = 'gifted';
-          gameFlow.hasRabbitPlush = true;
-          completeTask('grandma_seat');
-          player.sitting = null;
-          player.x = 200;
-          player.y = PLAYER_BASE_Y;
-          player.facing = -1;
-          player.state = 'IDLE';
-          gameFlow.dialogue = '할머니가 분홍 토끼 인형을 건넸다. 인형을 받아 셔츠 앞주머니에 반쯤 넣었다.';
-          gameFlow.grandmaTalkStep = 0;
-          busJourney.state = 'moving';
-          busJourney.movingUntil = performance.now() + 7500;
+          completeGrandmaSeatTask();
         }
         setFlowMode('dialogue', 12000);
         return true;
@@ -1530,8 +1543,13 @@ function updateGameFlow(deltaSeconds) {
     }
   }
 
+  if (gameFlow.hiddenSeaEndingAt !== null && performance.now() >= gameFlow.hiddenSeaEndingAt) {
+    showEnding('hidden_sea');
+  }
+
   if (!gameFlow.mode && !gameFlow.finale &&
-      ['kindness', 'self_happiness', 'food_kindness', 'nature_happiness', 'greetings'].includes(gameFlow.selectedEnding)) {
+      ['kindness', 'self_happiness', 'food_kindness', 'nature_happiness', 'greetings'].includes(gameFlow.selectedEnding) &&
+      (gameFlow.taskEndingRevealAt === null || performance.now() >= gameFlow.taskEndingRevealAt)) {
     showEnding(gameFlow.selectedEnding);
   }
 
@@ -1565,6 +1583,9 @@ function updateGameFlow(deltaSeconds) {
       busArrival.x = Math.min(currentScene.width, busArrival.x + 380 * deltaSeconds);
       if (busArrival.x >= currentScene.width) {
         if (currentSceneId === busArrival.departureTarget) {
+          if (currentSceneId === 'sea' && busArrival.departureTarget === 'sea') {
+            gameFlow.hiddenSeaEndingAt = performance.now() + 2000;
+          }
           busArrival.state = 'waiting';
           busArrival.departureTarget = null;
         } else {
@@ -3550,6 +3571,16 @@ window.addEventListener('keydown', (e) => {
     }
     return;
   }
+  if (debugAccessEnabled && !sceneTransition.active && (e.key === 'r' || e.key === 'R') &&
+      currentSceneId === 'bus' &&
+      ['waiting', 'entering', 'approach', 'seatedTalking'].includes(gameFlow.grandmaState) &&
+      !gameFlow.completed.has('grandma_seat')) {
+    e.preventDefault();
+    if (e.repeat) return;
+    completeGrandmaSeatTask();
+    setFlowMode('dialogue', 12000);
+    return;
+  }
   if (gameFlow.mode === 'choice') {
     handleGameFlowKey(e);
     return;
@@ -3592,6 +3623,14 @@ window.addEventListener('keydown', (e) => {
       gameFlow.activityMotion = null;
       sceneTransition.start(targetScene, spawnPositions[targetScene]);
     }
+    return;
+  }
+  if (debugAccessEnabled && !sceneTransition.active && (e.key === 'r' || e.key === 'R') &&
+      currentSceneId === 'bus' && busJourney.state === 'moving') {
+    e.preventDefault();
+    if (e.repeat) return;
+    busJourney.movingUntil = performance.now();
+    updateGameFlow(0);
     return;
   }
   if (debugAccessEnabled && !sceneTransition.active && (e.key === 'r' || e.key === 'R') && currentSceneId === 'bus_stop') {
@@ -3644,6 +3683,7 @@ window.addEventListener('keydown', (e) => {
     gameFlow.dialogueSequence = null;
     gameFlow.day = 1;
     gameFlow.selectedEnding = null;
+    gameFlow.taskEndingRevealAt = null;
     gameFlow.finale = null;
     endingUI.showEndTitle = false;
     gameFlow.dialogue = null;
