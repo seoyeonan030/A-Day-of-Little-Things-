@@ -1,7 +1,7 @@
 {
   "name": "a-slightly-different-day",
   "version": "1.0.0",
-  "description": "오늘은 조금 다른 하루 (A Slightly Different Day) - 2D 일상 탐험 어드벤처 웹 게임",
+  "description": "A Day of Little Things: 작은 것들의 하루 다른 하루 (A Slightly Different Day) - 2D 일상 탐험 어드벤처 웹 게임",
   "private": true,
   "scripts": {
     "start": "npx serve .",

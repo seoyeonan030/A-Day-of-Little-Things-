@@ -1,4 +1,4 @@
-/** 오늘은 조금 다른 하루: 횡스크롤 동네 탐험 */
+/**A Day of Little Things: 작은 것들의 하루  다른 하루: 횡스크롤 동네 탐험 */
 
 const canvas = document.getElementById('viewport');
 const ctx = canvas.getContext('2d');
