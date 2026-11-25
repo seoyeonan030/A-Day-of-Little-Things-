@@ -7,11 +7,11 @@ class SoundEngine {
   constructor() {
     this.ctx = null;
     this.isMuted = false;
-    this.ambientTimer = null;
     this.masterGain = null;
-    this.bgmGain = null;
     this.sfxGain = null;
-    this.chordStep = 0;
+    this.bgm = new Audio('./sound/main%20bgm.mp3');
+    this.bgm.loop = true;
+    this.bgm.volume = 0.6;
   }
 
   init() {
@@ -24,15 +24,10 @@ class SoundEngine {
     this.masterGain.gain.setValueAtTime(0.7, this.ctx.currentTime);
     this.masterGain.connect(this.ctx.destination);
 
-    this.bgmGain = this.ctx.createGain();
-    this.bgmGain.gain.setValueAtTime(0.25, this.ctx.currentTime);
-    this.bgmGain.connect(this.masterGain);
-
     this.sfxGain = this.ctx.createGain();
     this.sfxGain.gain.setValueAtTime(0.6, this.ctx.currentTime);
     this.sfxGain.connect(this.masterGain);
 
-    this.startAmbient();
   }
 
   ensureResume() {
@@ -40,6 +35,9 @@ class SoundEngine {
       this.init();
     } else if (this.ctx.state === 'suspended') {
       this.ctx.resume();
+    }
+    if (this.bgm.paused) {
+      this.bgm.play().catch(() => {});
     }
   }
 
@@ -49,6 +47,7 @@ class SoundEngine {
     if (this.masterGain && this.ctx) {
       this.masterGain.gain.setTargetAtTime(this.isMuted ? 0 : 0.7, this.ctx.currentTime, 0.05);
     }
+    this.bgm.muted = this.isMuted;
     return this.isMuted;
   }
 
@@ -112,6 +111,45 @@ class SoundEngine {
       oscillator.start(start);
       oscillator.stop(start + 0.25);
     });
+  }
+
+  playTaskComplete(taskId) {
+    const taskSounds = {
+      bed: 'playBenchEvent',
+      window: 'playBenchEvent',
+      cactus: 'playFlowerEvent',
+      monitor_chat: 'playProgressMilestone',
+      monitor_email: 'playProgressMilestone',
+      cereal: 'playCrunchEvent',
+      dishes: 'playDishwashingEvent',
+      apartment_door_887: 'playSnackEvent',
+      stone: 'playPuzzleSound',
+      stairs_door: 'playSprintEvent',
+      flower: 'playFlowerEvent',
+      guard: 'playSnackEvent',
+      tree_leaves: 'playFlowerEvent',
+      cat_pet: 'playCatEvent',
+      cat_feed: 'playCatEvent',
+      bus_window: 'playBenchEvent',
+      grandma_seat: 'playProgressMilestone',
+      stationery_game: 'playGachaEvent',
+      poem: 'playBookEvent',
+      piano_sound: 'playSwingEvent',
+      pocha_snack: 'playSnackEvent',
+      school_sign: 'playPuzzleSound',
+      presentation: 'playProgressMilestone',
+      desks_align: 'playPuzzleSound',
+      friend_confession: 'playProgressMilestone',
+    };
+    if (taskId === 'cat_treats') return;
+    const sound = taskSounds[taskId];
+    if (sound === 'playPuzzleSound') {
+      this.playPuzzleSound(true);
+    } else if (sound) {
+      this[sound]();
+    } else {
+      this.playPuzzleSound(true);
+    }
   }
 
   playCatEvent() {
@@ -542,46 +580,6 @@ class SoundEngine {
     });
   }
 
-  // --- Generative Ambient BGM ---
-  startAmbient() {
-    if (this.ambientTimer) return;
-    const chords = [
-      [220.00, 261.63, 329.63], // Am
-      [174.61, 220.00, 261.63], // F
-      [196.00, 246.94, 293.66], // G
-      [130.81, 164.81, 196.00], // C
-    ];
-
-    const playNext = () => {
-      if (!this.ctx || this.isMuted) {
-        this.ambientTimer = setTimeout(playNext, 4000);
-        return;
-      }
-      const now = this.ctx.currentTime;
-      const currentChord = chords[this.chordStep % chords.length];
-      this.chordStep++;
-
-      currentChord.forEach((freq, idx) => {
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, now + idx * 0.05);
-
-        gain.gain.setValueAtTime(0, now);
-        gain.gain.linearRampToValueAtTime(0.04, now + 1.2);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 4.5);
-
-        osc.connect(gain);
-        gain.connect(this.bgmGain);
-        osc.start(now);
-        osc.stop(now + 4.5);
-      });
-
-      this.ambientTimer = setTimeout(playNext, 4200);
-    };
-
-    playNext();
-  }
 }
 
 window.soundEngine = new SoundEngine();

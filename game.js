@@ -224,7 +224,7 @@ const player = {
     ctx.translate(this.x, this.y - scale * (1.5 + bob));
     ctx.scale(this.facing * scale, scale);
 
-    const gait = this.state === 'WALK' ? Math.sin(this.walkPhase * 0.5) : 0;
+    const gait = this.state === 'WALK' ? Math.sin(this.walkPhase) : 0;
     const legSwing = gait * 0.32;
     const armSwing = -gait * 0.28;
     const bodyWidth = 4;
@@ -524,6 +524,7 @@ function drawTaskProgress(ctx) {
 function completeTask(taskId) {
   gameFlow.completed.add(taskId);
   gameFlow.runTaskIds.add(taskId);
+  window.soundEngine.playTaskComplete(taskId);
   evaluateTaskEnding();
 }
 
@@ -1281,8 +1282,6 @@ function interactWith(activity) {
     gameFlow.cerealEver = true;
   }
   gameFlow.dialogue = activity.text;
-  if (activity.id === 'cereal') window.soundEngine.playCrunchEvent();
-  if (activity.id === 'dishes') window.soundEngine.playDishwashingEvent();
   gameFlow.activityMotion = ['flower', 'guard', 'cereal', 'dishes'].includes(activity.id) ? activity.id : null;
   if (gameFlow.activityMotion) {
     player.facing = activity.x >= player.x ? 1 : -1;
