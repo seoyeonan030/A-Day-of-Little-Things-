@@ -3165,7 +3165,7 @@ function drawSceneBackground(ctx, scene) {
 let showShortcutHelp = false;
 let shortcutHelpPage = 0;
 const shortcutHelpPageCount = 5;
-const DEBUG_PASSWORD = 'anotherday';
+const DEBUG_PASSWORD = 'ekfmsgkfn';
 let debugAccessEnabled = false;
 let debugPasswordPromptOpen = false;
 let debugPasswordValue = '';
@@ -3491,7 +3491,7 @@ function updateAudioToggleIcon(isMuted) {
 
 window.addEventListener('keydown', (e) => {
   window.soundEngine.ensureResume();
-  if (e.key === 'm' || e.key === 'M') {
+  if (!debugPasswordPromptOpen && (e.key === 'm' || e.key === 'M')) {
     if (!e.repeat) updateAudioToggleIcon(window.soundEngine.toggleMute());
     return;
   }
@@ -3520,8 +3520,9 @@ window.addEventListener('keydown', (e) => {
   }
   if (debugPasswordPromptOpen) {
     e.preventDefault();
-    if (e.repeat || e.isComposing) return;
+    if (e.repeat) return;
     if (e.key === 'Enter') {
+      if (e.isComposing) return;
       if (debugPasswordValue.toLowerCase() === DEBUG_PASSWORD) {
         debugAccessEnabled = true;
         debugPasswordPromptOpen = false;
@@ -3539,6 +3540,9 @@ window.addEventListener('keydown', (e) => {
       debugPasswordError = false;
     } else if (e.key === 'Backspace') {
       debugPasswordValue = debugPasswordValue.slice(0, -1);
+      debugPasswordError = false;
+    } else if (/^Key[A-Z]$/.test(e.code)) {
+      debugPasswordValue += e.code.slice(3).toLowerCase();
       debugPasswordError = false;
     } else if (e.key.length === 1) {
       debugPasswordValue += e.key;
