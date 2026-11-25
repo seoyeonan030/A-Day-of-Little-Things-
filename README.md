@@ -1,4 +1,4 @@
-# 오늘은 조금 다른 하루 (A Slightly Different Day Today)
+# A Day of Little Things: 작은 것들의 하루
 
 동네 곳곳을 자유롭게 걸어 다니는 **2D 횡스크롤 탐험 게임**입니다.
 
