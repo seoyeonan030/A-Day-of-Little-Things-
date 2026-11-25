@@ -45,6 +45,81 @@ canvas#viewport {
   outline: none;
 }
 
+#intro-overlay {
+  position: absolute;
+  inset: 0;
+  width: min(80vw, 240vh, 1280px);
+  height: min(26.6667vw, 80vh, 426.67px);
+  margin: auto;
+  color: #202321;
+  font-family: sans-serif;
+  text-align: center;
+  pointer-events: none;
+  z-index: 1;
+  container-type: size;
+}
+
+#intro-overlay[hidden] {
+  display: none;
+}
+
+#intro-overlay h1,
+#intro-overlay p {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  margin: 0;
+  transform: translateY(-50%);
+}
+
+#intro-overlay h1 {
+  top: 35%;
+  font-size: 12.5cqh;
+  font-weight: 700;
+  line-height: 1.15;
+}
+
+#intro-overlay .intro-subtitle {
+  top: 49.375%;
+  color: #353a36;
+  font-size: 6.25cqh;
+  font-weight: 700;
+}
+
+#intro-overlay .intro-start {
+  top: 68.125%;
+  color: #414642;
+  font-size: 5cqh;
+}
+
+.intro-controls {
+  position: absolute;
+  right: 8%;
+  bottom: 8%;
+  left: 8%;
+  display: flex;
+  justify-content: space-evenly;
+  align-items: flex-start;
+}
+
+.intro-control {
+  display: flex;
+  width: 33.333%;
+  flex-direction: column;
+  gap: 0.6cqh;
+}
+
+.intro-control strong {
+  font-size: 5.625cqh;
+  line-height: 1.2;
+}
+
+.intro-control span {
+  color: #414642;
+  font-size: 4.6875cqh;
+  line-height: 1.2;
+}
+
 /* Monitor Task Input Field */
 #monitor-task-input {
   position: absolute;

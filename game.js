@@ -2,10 +2,12 @@
 
 const canvas = document.getElementById('viewport');
 const ctx = canvas.getContext('2d');
+const introOverlay = document.getElementById('intro-overlay');
 const endingBackdrop = document.createElement('canvas');
 endingBackdrop.width = canvas.width;
 endingBackdrop.height = canvas.height;
 const endingBackdropContext = endingBackdrop.getContext('2d');
+let introScreen = true;
 const endingUI = {
   view: 'summary',
   showEndTitle: false,
@@ -2351,6 +2353,16 @@ function drawEndTitle(ctx) {
   ctx.restore();
 }
 
+function drawIntroScreen(ctx) {
+  ctx.fillStyle = '#b5b5b5';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+function startGameFromIntro() {
+  introScreen = false;
+  introOverlay.hidden = true;
+}
+
 function drawFlowOverlay(ctx) {
   if (['monitorMenu', 'monitorTyping', 'monitorSuccess'].includes(gameFlow.mode)) {
     drawMonitorTaskOverlay(ctx);
@@ -3326,6 +3338,13 @@ function gameLoop() {
   const deltaSeconds = Math.min((now - lastFlowFrame) / 1000, 0.05);
   lastFlowFrame = now;
 
+  if (introScreen) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawIntroScreen(ctx);
+    requestAnimationFrame(gameLoop);
+    return;
+  }
+
   const isPostEnding = Boolean(endingUI.showEndTitle || gameFlow.mode === 'finale' || endingUI.savedEnding);
   if (isPostEnding) {
     keys.left = false;
@@ -3514,6 +3533,13 @@ window.addEventListener('keydown', (e) => {
   window.soundEngine.ensureResume();
   if (!debugPasswordPromptOpen && (e.key === 'm' || e.key === 'M')) {
     if (!e.repeat) updateAudioToggleIcon(window.soundEngine.toggleMute());
+    return;
+  }
+  if (introScreen) {
+    if (e.code === 'Space' || e.key === ' ') {
+      startGameFromIntro();
+      e.preventDefault();
+    }
     return;
   }
 

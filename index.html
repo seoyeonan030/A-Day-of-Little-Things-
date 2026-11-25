@@ -27,6 +27,16 @@
 <body>
   <div id="game-container">
     <canvas id="viewport" width="960" height="320" tabindex="0" aria-label="오늘은 조금 다른 하루 게임 화면"></canvas>
+    <div id="intro-overlay">
+      <h1>A Day of Little Things</h1>
+      <p class="intro-subtitle">:작은 것들의 하루</p>
+      <p class="intro-start">SPACE를 눌러 시작</p>
+      <div class="intro-controls">
+        <div class="intro-control"><strong>A / D</strong><span>이동</span></div>
+        <div class="intro-control"><strong>SPACE</strong><span>시작 · 상호작용</span></div>
+        <div class="intro-control"><strong>M</strong><span>소리 켜기 / 끄기</span></div>
+      </div>
+    </div>
     <input id="monitor-task-input" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="여기에 입력하세요…" aria-label="모니터 과제 입력" style="display: none;">
     <button id="audio-toggle" type="button" aria-label="음소거 전환" title="소리 켜기/끄기 (단축키: M)">
       <span id="audio-icon">🔊</span>
