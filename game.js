@@ -384,6 +384,8 @@ const gameFlow = {
   selectedEnding: null,
   finale: null,
   runTaskIds: new Set(),
+  hiddenSeaProgress: false,
+  hiddenConfessionProgress: false,
   unlockedTaskIds: loadUnlockedTaskIds(),
   hiddenConfessionActive: false,
   nearby: null,
@@ -427,6 +429,88 @@ function evaluateTaskEnding() {
   else if (total === 5 && hasAll(greetingEndingTaskIds)) gameFlow.selectedEnding = 'greetings';
   else if (total === 5 && [...kindnessTaskIds].filter(id => runTasks.has(id)).length >= 3) gameFlow.selectedEnding = 'kindness';
   else if (total === 5 && generalTasks.filter(id => !kindnessTaskIds.has(id)).length >= 3) gameFlow.selectedEnding = 'self_happiness';
+}
+
+function getTaskProgressColor() {
+  const runTasks = gameFlow.runTaskIds;
+  const alternateEndings = [
+    [foodEndingTaskIds, endingDefinitions.food_kindness.background],
+    [natureEndingTaskIds, endingDefinitions.nature_happiness.background],
+    [greetingEndingTaskIds, endingDefinitions.greetings.background],
+  ];
+  const alternateMatch = alternateEndings.find(([taskIds]) =>
+    [...taskIds].filter(taskId => runTasks.has(taskId)).length >= 4
+  );
+  if (alternateMatch) return alternateMatch[1];
+
+  const generalTasks = [...runTasks].filter(id =>
+    !id.startsWith('monitor_') && id !== 'friend_confession' && id !== 'hidden_sea'
+  );
+  const kindnessCount = generalTasks.filter(id => kindnessTaskIds.has(id)).length;
+  const selfHappinessCount = generalTasks.length - kindnessCount;
+  if (kindnessCount >= 3) return endingDefinitions.kindness.background;
+  if (selfHappinessCount >= 3) return endingDefinitions.self_happiness.background;
+  return gameFlow.selectedEnding === 'self_happiness'
+    ? endingDefinitions.self_happiness.background
+    : endingDefinitions.kindness.background;
+}
+
+function drawTaskProgress(ctx) {
+  const generalTasks = [...gameFlow.runTaskIds].filter(id =>
+    !id.startsWith('monitor_') && id !== 'friend_confession' && id !== 'hidden_sea'
+  );
+  const taskCount = Math.min(generalTasks.length, 5);
+  const taskColor = getTaskProgressColor();
+  const taskStartX = 12;
+  const rowY = 12;
+  const cellSize = 14;
+  const bedFrameColor = '#555555';
+  const cactusPotColor = '#7d7d7d';
+  const progressLineWidth = 1;
+  const cornerRadius = 2.5;
+  const taskBarWidth = cellSize * 5;
+
+  ctx.save();
+  ctx.lineWidth = progressLineWidth;
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(taskStartX, rowY, taskBarWidth, cellSize, cornerRadius);
+  ctx.clip();
+  for (let index = 0; index < 5; index++) {
+    const x = taskStartX + index * cellSize;
+    ctx.fillStyle = index < taskCount ? taskColor : 'rgba(255, 255, 255, 0.12)';
+    ctx.fillRect(x, rowY, cellSize, cellSize);
+  }
+  for (let index = 1; index < 5; index++) {
+    ctx.strokeStyle = cactusPotColor;
+    ctx.beginPath();
+    ctx.moveTo(taskStartX + index * cellSize + 0.5, rowY);
+    ctx.lineTo(taskStartX + index * cellSize + 0.5, rowY + cellSize);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  ctx.strokeStyle = bedFrameColor;
+  ctx.lineWidth = progressLineWidth;
+  ctx.beginPath();
+  ctx.roundRect(taskStartX + 0.5, rowY + 0.5, taskBarWidth - 1, cellSize - 1, cornerRadius);
+  ctx.stroke();
+
+  const hiddenStartX = taskStartX + 5 * cellSize + 10;
+  const hiddenProgress = [gameFlow.hiddenSeaProgress, gameFlow.hiddenConfessionProgress];
+  const hiddenColors = [endingDefinitions.hidden_sea.background, endingDefinitions.hidden_confession.background];
+  hiddenProgress.forEach((isComplete, index) => {
+    const x = hiddenStartX + index * (cellSize + 8);
+    ctx.fillStyle = isComplete ? hiddenColors[index] : 'rgba(255, 255, 255, 0.12)';
+    ctx.beginPath();
+    ctx.roundRect(x, rowY, cellSize, cellSize, cornerRadius);
+    ctx.fill();
+    ctx.strokeStyle = bedFrameColor;
+    ctx.beginPath();
+    ctx.roundRect(x + 0.5, rowY + 0.5, cellSize - 1, cellSize - 1, cornerRadius);
+    ctx.stroke();
+  });
+  ctx.restore();
 }
 
 function completeTask(taskId) {
@@ -936,6 +1020,7 @@ function chooseBusPrompt(answer) {
     if (answer) {
       disembarkBus('school');
     } else {
+      gameFlow.hiddenSeaProgress = true;
       gameFlow.choiceKind = 'confirm_leave';
       gameFlow.dialogue = '정말 내리지 않겠습니까?';
       setFlowMode('choice');
@@ -1322,6 +1407,7 @@ function handleGameFlowKey(event) {
           gameFlow.dialogue = null;
           gameFlow.activityMotion = null;
           if (!isReplay) completeTask(taskId);
+          if (taskId === 'friend_confession' && !isReplay) gameFlow.hiddenConfessionProgress = true;
           setFlowMode(null);
           if (taskId === 'friend_confession' && !isReplay) {
             gameFlow.hiddenConfessionActive = true;
@@ -3079,6 +3165,11 @@ function drawSceneBackground(ctx, scene) {
 let showShortcutHelp = false;
 let shortcutHelpPage = 0;
 const shortcutHelpPageCount = 5;
+const DEBUG_PASSWORD = 'anotherday';
+let debugAccessEnabled = false;
+let debugPasswordPromptOpen = false;
+let debugPasswordValue = '';
+let debugPasswordError = false;
 
 function taskNames(taskIds) {
   const names = new Map(taskCatalog.map(([id, name]) => [id, name]));
@@ -3178,6 +3269,36 @@ function drawShortcutHelp(ctx) {
   ctx.restore();
 }
 
+function drawDebugPasswordPrompt(ctx) {
+  const panelWidth = 360;
+  const panelHeight = 104;
+  const panelX = (canvas.width - panelWidth) / 2;
+  const panelY = (canvas.height - panelHeight) / 2;
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(25, 25, 25, 0.94)';
+  ctx.fillRect(panelX, panelY, panelWidth, panelHeight);
+  ctx.strokeStyle = '#d5d5d5';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(panelX + 0.5, panelY + 0.5, panelWidth - 1, panelHeight - 1);
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 14px sans-serif';
+  ctx.fillText('개발자 암호', panelX + 18, panelY + 22);
+  ctx.fillStyle = '#101010';
+  ctx.fillRect(panelX + 18, panelY + 40, panelWidth - 36, 28);
+  ctx.strokeStyle = debugPasswordError ? '#ff7777' : '#aaaaaa';
+  ctx.strokeRect(panelX + 18.5, panelY + 40.5, panelWidth - 37, 27);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '14px monospace';
+  ctx.fillText(`${'*'.repeat(debugPasswordValue.length)}▏`, panelX + 26, panelY + 54);
+  ctx.fillStyle = debugPasswordError ? '#ff9999' : '#bdbdbd';
+  ctx.font = '11px sans-serif';
+  ctx.fillText(debugPasswordError ? '암호가 올바르지 않습니다.' : 'Enter 확인 · Esc 취소', panelX + 18, panelY + 84);
+  ctx.restore();
+}
+
 // Main Game Loop
 function gameLoop() {
   const now = performance.now();
@@ -3241,7 +3362,9 @@ function gameLoop() {
       drawEndingOverlay(ctx);
     }
   } else {
-    if (showShortcutHelp) drawShortcutHelp(ctx);
+    drawTaskProgress(ctx);
+    if (debugPasswordPromptOpen) drawDebugPasswordPrompt(ctx);
+    else if (debugAccessEnabled && showShortcutHelp) drawShortcutHelp(ctx);
   }
 
   requestAnimationFrame(gameLoop);
@@ -3361,8 +3484,18 @@ canvas.addEventListener('wheel', event => {
   event.preventDefault();
 }, { passive: false });
 
+function updateAudioToggleIcon(isMuted) {
+  const audioIcon = document.getElementById('audio-icon');
+  if (audioIcon) audioIcon.textContent = isMuted ? '🔇' : '🔊';
+}
+
 window.addEventListener('keydown', (e) => {
   window.soundEngine.ensureResume();
+  if (e.key === 'm' || e.key === 'M') {
+    if (!e.repeat) updateAudioToggleIcon(window.soundEngine.toggleMute());
+    return;
+  }
+
   const isPostEnding = Boolean(endingUI.showEndTitle || gameFlow.mode === 'finale' || endingUI.savedEnding);
   if (isPostEnding) {
     if (gameFlow.mode === 'finale' && !endingUI.showEndTitle) {
@@ -3385,6 +3518,34 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     return;
   }
+  if (debugPasswordPromptOpen) {
+    e.preventDefault();
+    if (e.repeat || e.isComposing) return;
+    if (e.key === 'Enter') {
+      if (debugPasswordValue.toLowerCase() === DEBUG_PASSWORD) {
+        debugAccessEnabled = true;
+        debugPasswordPromptOpen = false;
+        debugPasswordValue = '';
+        debugPasswordError = false;
+        showShortcutHelp = true;
+        shortcutHelpPage = 0;
+      } else {
+        debugPasswordValue = '';
+        debugPasswordError = true;
+      }
+    } else if (e.key === 'Escape') {
+      debugPasswordPromptOpen = false;
+      debugPasswordValue = '';
+      debugPasswordError = false;
+    } else if (e.key === 'Backspace') {
+      debugPasswordValue = debugPasswordValue.slice(0, -1);
+      debugPasswordError = false;
+    } else if (e.key.length === 1) {
+      debugPasswordValue += e.key;
+      debugPasswordError = false;
+    }
+    return;
+  }
   if (gameFlow.mode === 'choice') {
     handleGameFlowKey(e);
     return;
@@ -3396,19 +3557,26 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Tab') {
     e.preventDefault();
     if (!e.repeat) {
-      showShortcutHelp = !showShortcutHelp;
-      if (showShortcutHelp) shortcutHelpPage = 0;
       keys.left = false;
       keys.right = false;
+      keys.speedBoost = false;
+      if (debugAccessEnabled) {
+        showShortcutHelp = !showShortcutHelp;
+        if (showShortcutHelp) shortcutHelpPage = 0;
+      } else {
+        debugPasswordPromptOpen = true;
+        debugPasswordValue = '';
+        debugPasswordError = false;
+      }
     }
     return;
   }
-  if (showShortcutHelp && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+  if (debugAccessEnabled && showShortcutHelp && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
     e.preventDefault();
     if (!e.repeat) shortcutHelpPage = Math.max(0, Math.min(shortcutHelpPageCount - 1, shortcutHelpPage + (e.key === 'ArrowRight' ? 1 : -1)));
     return;
   }
-  if (!sceneTransition.active && /^[0-9]$/.test(e.key)) {
+  if (debugAccessEnabled && !sceneTransition.active && /^[0-9]$/.test(e.key)) {
     e.preventDefault();
     if (e.repeat) return;
     const mapOrder = ['home', 'living_room', 'apartment_hallway', 'elevator', 'home_front', 'bus_stop', 'bus', 'street', 'school'];
@@ -3422,7 +3590,7 @@ window.addEventListener('keydown', (e) => {
     }
     return;
   }
-  if (!sceneTransition.active && (e.key === 'r' || e.key === 'R') && currentSceneId === 'bus_stop') {
+  if (debugAccessEnabled && !sceneTransition.active && (e.key === 'r' || e.key === 'R') && currentSceneId === 'bus_stop') {
     e.preventDefault();
     if (e.repeat) return;
     if (busArrival.state === 'departing') {
@@ -3451,12 +3619,6 @@ window.addEventListener('keydown', (e) => {
   }
   if (currentSceneId === 'bus_stop' && busArrival.state === 'waiting') {
     busArrival.idleSince = null;
-  }
-
-  // Sound Mute Toggle with 'M' key
-  if (e.key === 'm' || e.key === 'M') {
-    window.soundEngine.toggleMute();
-    return;
   }
 
   if (e.key === 'x' || e.key === 'X') {
@@ -3542,7 +3704,7 @@ window.addEventListener('keydown', (e) => {
     e.preventDefault();
     keys.right = true;
   }
-  if (e.key === 'Shift') {
+  if (debugAccessEnabled && e.key === 'Shift') {
     keys.speedBoost = true;
   }
 
@@ -3573,8 +3735,7 @@ const audioToggle = document.getElementById('audio-toggle');
 if (audioToggle) {
   audioToggle.addEventListener('click', () => {
     const isMuted = window.soundEngine.toggleMute();
-    const audioIcon = document.getElementById('audio-icon');
-    if (audioIcon) audioIcon.textContent = isMuted ? '🔇' : '🔊';
+    updateAudioToggleIcon(isMuted);
   });
 }
 
