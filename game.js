@@ -436,7 +436,12 @@ function evaluateTaskEnding() {
   else if (total === 5 && hasAll(greetingEndingTaskIds)) gameFlow.selectedEnding = 'greetings';
   else if (total === 5 && [...kindnessTaskIds].filter(id => runTasks.has(id)).length >= 3) gameFlow.selectedEnding = 'kindness';
   else if (total === 5 && generalTasks.filter(id => !kindnessTaskIds.has(id)).length >= 3) gameFlow.selectedEnding = 'self_happiness';
-  if (!previousEnding && gameFlow.selectedEnding) gameFlow.taskEndingRevealAt = performance.now() + 2000;
+  if (!previousEnding && gameFlow.selectedEnding) {
+    gameFlow.taskEndingRevealAt = performance.now() + 1000;
+    keys.left = false;
+    keys.right = false;
+    keys.speedBoost = false;
+  }
 }
 
 function getTaskProgressColor() {
@@ -3344,7 +3349,7 @@ function gameLoop() {
     return;
   }
 
-  const isPostEnding = Boolean(endingUI.showEndTitle || gameFlow.mode === 'finale' || endingUI.savedEnding);
+  const isPostEnding = Boolean(endingUI.showEndTitle || gameFlow.mode === 'finale' || endingUI.savedEnding || gameFlow.taskEndingRevealAt !== null);
   if (isPostEnding) {
     keys.left = false;
     keys.right = false;
